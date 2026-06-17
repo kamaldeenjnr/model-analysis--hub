@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Model Analysis Hub | Data Analytics & AI Solutions</title>
+  <meta name="description" content="Model Analysis Hub is an advanced data analytics, AI, and software engineering studio founded by Amadu Kamal. We build intelligent digital systems." />
+  <meta name="keywords" content="Data Analytics, Web Development, Statistical Modeling, Dashboards, Model Analysis Hub, QuantAI, Amadu Kamal, Ghana" />
+  <meta name="author" content="Amadu Kamal" />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Model Analysis Hub" />
+  <meta property="og:description" content="Advanced analytics, AI systems, and web engineering. Founded by Amadu Kamal." />
+  <meta property="og:type" content="website" />
+
+  <!-- Favicon -->
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
+
+  <!-- Schema.org Organization -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Model Analysis Hub",
+    "url": "https://modelanalysishub.com",
+    "logo": "https://modelanalysishub.com/images/modellogo.jpg",
+    "description": "Data analytics, AI systems, and web development studio providing intelligent digital solutions.",
+    "founder": {
+      "@type": "Person",
+      "name": "Amadu Kamal",
+      "email": "amadukamal8@gmail.com",
+      "telephone": "+233595586430"
+    },
+    "sameAs": [
+      "https://www.linkedin.com/in/amadu-kamal-65ab5326a",
+      "https://github.com/kamaldeenjnr"
+    ]
+  }
+  </script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@700;900&display=swap" rel="stylesheet">
+
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { primary: '#2563eb', secondary: '#7c3aed', accent: '#06b6d4', dark: '#0f172a' },
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'], display: ['Outfit', 'sans-serif'] },
+          animation: {
+            float: 'float 7s ease-in-out infinite',
+            'pulse-slow': 'pulse 3s ease-in-out infinite',
+            gradient: 'gradient 15s ease infinite',
+            'slide-up': 'slideUp 0.6s ease-out both',
+            'fade-in': 'fadeIn 0.8s ease both',
+          },
+          keyframes: {
+            float: { '0%,100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-18px)' } },
+            slideUp: { '0%': { transform: 'translateY(24px)', opacity: '0' }, '100%': { transform: 'translateY(0)', opacity: '1' } },
+            fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
+            gradient: { '0%,100%': { 'background-position': '0% 50%' }, '50%': { 'background-position': '100% 50%' } },
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: linear-gradient(-45deg, #f8fafc, #e0f2fe, #fdf4ff, #f0f9ff);
+      background-size: 400% 400%;
+      animation: gradient 15s ease infinite;
+      min-height: 100vh;
+      color: #1e293b;
+    }
+
+    .section-padding { padding-top: 5rem; padding-bottom: 5rem; }
+
+    .gradient-bg {
+      background: linear-gradient(135deg, rgba(248,250,252,0.92) 0%, rgba(224,242,254,0.92) 100%);
+      backdrop-filter: blur(10px);
+    }
+
+    .text-gradient {
+      background: linear-gradient(90deg, #2563eb 0%, #7c3aed 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
+      transition: all 0.3s ease;
+    }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(37, 99, 235, 0.35); }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.78);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      border-radius: 1.5rem;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.06);
+      transition: all 0.35s ease;
+    }
+    .glass-card:hover { transform: translateY(-8px); box-shadow: 0 24px 48px rgba(37, 99, 235, 0.1); border-color: rgba(37,99,235,0.2); }
+
+    /* Bar chart decorative */
+    .bar-chart { display: flex; align-items: flex-end; height: 110px; gap: 10px; padding: 8px 0; }
+    .bar {
+      flex: 1; border-radius: 6px 6px 0 0;
+      background: linear-gradient(to top, #2563eb, #7c3aed);
+      animation: barGrow 1.2s ease-out both;
+    }
+    @keyframes barGrow { from { transform: scaleY(0); transform-origin: bottom; } to { transform: scaleY(1); transform-origin: bottom; } }
+
+    /* Stats counters */
+    .stat-card {
+      background: rgba(255,255,255,0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.85);
+      border-radius: 16px;
+      padding: 24px;
+      text-align: center;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.05);
+    }
+
+    /* Project overlay cards */
+    .proj-card-hero {
+      position: relative; overflow: hidden;
+      border-radius: 20px; border: 1px solid rgba(255,255,255,0.5);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+      transition: all 0.35s ease;
+    }
+    .proj-card-hero:hover { transform: translateY(-6px); box-shadow: 0 20px 48px rgba(37,99,235,0.15); }
+    .proj-card-hero img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease; display: block; }
+    .proj-card-hero:hover img { transform: scale(1.05); }
+    .proj-overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(to top, rgba(15,23,42,0.92) 0%, rgba(15,23,42,0.4) 55%, transparent 100%);
+      display: flex; flex-direction: column; justify-content: flex-end; padding: 28px;
+    }
+
+    /* Section label */
+    .label-pill {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: white; border: 1px solid #e2e8f0;
+      border-radius: 999px; padding: 5px 14px;
+      font-size: 12px; font-weight: 700; color: #2563eb;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+  </style>
+</head>
+<body class="font-sans selection:bg-blue-200">
+
+  <!-- ── NAVIGATION ──────────────────────────────────────────────────── -->
+  <header class="sticky top-0 z-50 bg-white/82 backdrop-blur-lg border-b border-gray-200/80 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+      <a href="index.html" class="flex items-center gap-3 group">
+        <div class="w-12 h-12 rounded-xl overflow-hidden shadow-md group-hover:shadow-lg transition-all">
+          <img src="images/modellogo.jpg" alt="Model Analysis Hub Logo" class="w-full h-full object-contain">
+        </div>
+        <div>
+          <p class="text-lg font-bold text-dark leading-tight">Model Analysis Hub</p>
+          <p class="text-xs text-gray-400">Research & AI Solutions</p>
+        </div>
+      </a>
+
+      <nav class="hidden md:flex items-center gap-8 text-sm font-medium">
+        <a href="index.html" class="text-primary">Home</a>
+        <a href="#solutions" class="text-gray-600 hover:text-primary transition-colors">Solutions</a>
+        <a href="projects.html" class="text-gray-600 hover:text-primary transition-colors">Projects</a>
+        <a href="ai.html" class="text-gray-600 hover:text-primary transition-colors">QuantAI</a>
+        <a href="founder.html" class="text-gray-600 hover:text-primary transition-colors">Founder</a>
+      </nav>
+
+      <div class="flex items-center gap-3">
+        <a href="https://wa.me/233595586430" target="_blank" class="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-lg bg-green-500 hover:bg-green-600 text-white font-semibold text-sm transition-all hover:-translate-y-0.5">
+          <i class="fab fa-whatsapp"></i> WhatsApp
+        </a>
+        <a href="mailto:amadukamal8@gmail.com" class="px-5 py-2.5 rounded-lg btn-primary text-white font-semibold text-sm shadow-md transition-all">
+          Contact
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── HERO ───────────────────────────────────────────────────────── -->
+  <section class="section-padding gradient-bg">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+
+        <!-- Left: Copy -->
+        <div class="space-y-7 animate-slide-up">
+          <div class="label-pill">
+            <span class="w-2 h-2 rounded-full bg-primary animate-pulse-slow"></span>
+            Data-Driven · Innovative · Powerful
+          </div>
+
+          <h1 class="font-display text-5xl md:text-6xl lg:text-7xl font-black leading-tight tracking-tight">
+            Advanced Analytics &<br>
+            <span class="text-gradient">Intelligent Systems</span>
+          </h1>
+
+          <p class="text-lg md:text-xl text-gray-600 leading-relaxed max-w-xl">
+            Model Analysis Hub bridges the gap between rigorous statistical research and cutting-edge software engineering - building transformative, enterprise-grade digital solutions.
+          </p>
+
+          <div class="flex flex-wrap gap-4">
+            <a href="ai.html" class="inline-flex items-center gap-3 px-7 py-3.5 rounded-xl btn-primary text-white font-bold text-sm shadow-lg">
+              <i class="fas fa-microchip"></i> Discover QuantAI
+            </a>
+            <a href="founder.html" class="inline-flex items-center gap-3 px-7 py-3.5 rounded-xl border border-gray-300 bg-white text-gray-700 font-bold text-sm hover:border-primary hover:text-primary hover:-translate-y-0.5 transition-all">
+              <i class="fas fa-user-tie"></i> Meet the Founder
+            </a>
+          </div>
+
+          <!-- Contact quick links -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+            <div class="p-4 bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200 shadow-sm">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-primary">
+                  <i class="fas fa-envelope"></i>
+                </div>
+                <div>
+                  <p class="text-xs text-gray-400 font-semibold">Email</p>
+                  <a href="mailto:amadukamal8@gmail.com" class="font-bold text-sm text-primary hover:underline">amadukamal8@gmail.com</a>
+                </div>
+              </div>
+            </div>
+            <div class="p-4 bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200 shadow-sm">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center text-green-600">
+                  <i class="fab fa-whatsapp"></i>
+                </div>
+                <div>
+                  <p class="text-xs text-gray-400 font-semibold">WhatsApp</p>
+                  <a href="https://wa.me/233595586430" target="_blank" class="font-bold text-sm text-primary hover:underline">+233 595 586 430</a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Decorative dashboard widget -->
+        <div class="relative flex justify-center items-center animate-float">
+          <div class="relative w-full max-w-md">
+            <!-- Glows -->
+            <div class="absolute -top-8 -right-8 w-40 h-40 rounded-full bg-gradient-to-br from-blue-400/25 to-purple-400/25 blur-2xl"></div>
+            <div class="absolute -bottom-8 -left-8 w-48 h-48 rounded-full bg-gradient-to-tr from-cyan-400/25 to-pink-400/25 blur-2xl"></div>
+
+            <div class="relative bg-white/92 backdrop-blur-xl rounded-3xl shadow-2xl border border-gray-200 p-7 z-10">
+              <div class="flex justify-between items-center mb-6">
+                <div>
+                  <p class="text-xs text-gray-400 font-semibold uppercase tracking-wide">Operational Intelligence</p>
+                  <h3 class="font-bold text-lg text-gray-900">Model Performance</h3>
+                </div>
+                <span class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 text-white text-xs font-bold">
+                  <span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse-slow"></span> Live
+                </span>
+              </div>
+
+              <!-- Chart mockup -->
+              <div class="bg-gray-50 rounded-xl p-4 border border-gray-100 mb-5">
+                <div class="flex justify-between text-xs text-gray-400 mb-3">
+                  <span>Predictive Accuracy</span>
+                  <span class="font-bold text-green-600">98.4%</span>
+                </div>
+                <div class="bar-chart">
+                  <div class="bar" style="height:45%; animation-delay:0.1s"></div>
+                  <div class="bar" style="height:75%; animation-delay:0.2s"></div>
+                  <div class="bar" style="height:55%; animation-delay:0.3s"></div>
+                  <div class="bar" style="height:90%; animation-delay:0.4s"></div>
+                  <div class="bar" style="height:65%; animation-delay:0.5s"></div>
+                  <div class="bar" style="height:80%; animation-delay:0.6s"></div>
+                  <div class="bar" style="height:70%; animation-delay:0.7s"></div>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-3 gap-3">
+                <div class="bg-blue-50 rounded-xl p-3 text-center">
+                  <p class="text-lg font-black text-primary">5+</p>
+                  <p class="text-xs text-gray-500 font-medium mt-0.5">Projects</p>
+                </div>
+                <div class="bg-purple-50 rounded-xl p-3 text-center">
+                  <p class="text-lg font-black text-secondary">100%</p>
+                  <p class="text-xs text-gray-500 font-medium mt-0.5">Committed</p>
+                </div>
+                <div class="bg-green-50 rounded-xl p-3 text-center">
+                  <p class="text-lg font-black text-green-600">24/7</p>
+                  <p class="text-xs text-gray-500 font-medium mt-0.5">Available</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── STATS STRIP ─────────────────────────────────────────────────── -->
+  <section class="py-10 px-4 sm:px-6 border-y border-gray-200 bg-white/60 backdrop-blur-sm">
+    <div class="max-w-7xl mx-auto">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+        <div class="stat-card">
+          <p class="text-3xl font-black text-gradient mb-1">5+</p>
+          <p class="text-sm text-gray-500 font-medium">Completed Projects</p>
+        </div>
+        <div class="stat-card">
+          <p class="text-3xl font-black text-gradient mb-1">3+</p>
+          <p class="text-sm text-gray-500 font-medium">Technical Domains</p>
+        </div>
+        <div class="stat-card">
+          <p class="text-3xl font-black text-gradient mb-1">98%</p>
+          <p class="text-sm text-gray-500 font-medium">Model Accuracy</p>
+        </div>
+        <div class="stat-card">
+          <p class="text-3xl font-black text-gradient mb-1">1</p>
+          <p class="text-sm text-gray-500 font-medium">Visionary Founder</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SOLUTIONS ───────────────────────────────────────────────────── -->
+  <section id="solutions" class="section-padding">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6">
+      <div class="text-center max-w-3xl mx-auto mb-14">
+        <div class="label-pill mb-4 mx-auto w-max">Core Expertise</div>
+        <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Engineering Data Solutions</h2>
+        <p class="text-lg text-gray-600">Fusing deep academic research with enterprise-grade development to create computational tools that work.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <article class="glass-card p-8">
+          <div class="w-14 h-14 rounded-2xl mb-6 flex items-center justify-center text-2xl" style="background:linear-gradient(135deg,#dbeafe,#ede9fe)">
+            <i class="fas fa-brain text-indigo-600"></i>
+          </div>
+          <h4 class="font-bold text-xl text-gray-900 mb-3">Predictive Modeling</h4>
+          <p class="text-gray-600 text-sm leading-relaxed">Building robust statistical forecasting models that translate complex data into clear, actionable intelligence for real-world decisions.</p>
+        </article>
+
+        <article class="glass-card p-8">
+          <div class="w-14 h-14 rounded-2xl mb-6 flex items-center justify-center text-2xl" style="background:linear-gradient(135deg,#d1fae5,#cffafe)">
+            <i class="fas fa-layer-group text-emerald-600"></i>
+          </div>
+          <h4 class="font-bold text-xl text-gray-900 mb-3">Full-Stack Development</h4>
+          <p class="text-gray-600 text-sm leading-relaxed">Architecting high-performance web applications and dashboards - from backend infrastructure to polished, responsive front-end interfaces.</p>
+        </article>
+
+        <article class="glass-card p-8">
+          <div class="w-14 h-14 rounded-2xl mb-6 flex items-center justify-center text-2xl" style="background:linear-gradient(135deg,#fce7f3,#fef3c7)">
+            <i class="fas fa-chart-line text-pink-600"></i>
+          </div>
+          <h4 class="font-bold text-xl text-gray-900 mb-3">Data Analytics</h4>
+          <p class="text-gray-600 text-sm leading-relaxed">Comprehensive statistical analysis, geospatial modeling, and interactive visualisation - turning raw numbers into strategic narrative.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FEATURED PROJECTS ───────────────────────────────────────────── -->
+  <section class="section-padding px-4 sm:px-6 border-t border-gray-200 bg-white/40 backdrop-blur-sm">
+    <div class="max-w-7xl mx-auto">
+      <div class="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
+        <div>
+          <div class="label-pill mb-3">Proven Track Record</div>
+          <h2 class="text-3xl md:text-4xl font-bold text-gray-900">Featured Projects</h2>
+        </div>
+        <a href="projects.html" class="btn-primary px-6 py-3 rounded-xl text-white font-bold text-sm flex items-center gap-2 shadow-md">
+          View All <i class="fas fa-arrow-right"></i>
+        </a>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+        <!-- Project 1 -->
+        <a href="projects.html" class="proj-card-hero block" style="height: 320px;">
+          <div class="w-full h-full overflow-hidden">
+            <img src="images/ghana_malaria_better_colors.png" alt="Malaria Risk Prediction Model">
+          </div>
+          <div class="proj-overlay">
+            <span class="inline-block px-3 py-1 bg-primary text-white text-xs font-bold rounded-full mb-3 w-max">Spatial Analytics</span>
+            <h3 class="text-2xl font-bold text-white mb-1">Malaria Risk Prediction</h3>
+            <p class="text-gray-300 text-sm">Geospatial pipeline forecasting disease risk across Ghana using climate and population data.</p>
+          </div>
+        </a>
+
+        <!-- Project 2 -->
+        <a href="projects.html" class="proj-card-hero block" style="height: 320px;">
+          <div class="w-full h-full overflow-hidden">
+            <img src="images/dashboooard.png" alt="Enterprise Analytics Dashboard">
+          </div>
+          <div class="proj-overlay">
+            <span class="inline-block px-3 py-1 bg-secondary text-white text-xs font-bold rounded-full mb-3 w-max">Web Dashboard</span>
+            <h3 class="text-2xl font-bold text-white mb-1">Enterprise Analytics Portal</h3>
+            <p class="text-gray-300 text-sm">Full-stack BI dashboard engineered for real-time data stream interpretation and KPI tracking.</p>
+          </div>
+        </a>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── QUANTAI TEASER ─────────────────────────────────────────────── -->
+  <section class="section-padding px-4 sm:px-6">
+    <div class="max-w-7xl mx-auto">
+      <div class="relative overflow-hidden rounded-3xl p-10 md:p-16 text-white" style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%)">
+        <!-- Decorative blobs -->
+        <div class="absolute top-0 right-0 w-80 h-80 rounded-full opacity-10 blur-3xl" style="background: radial-gradient(circle, #60a5fa, transparent 70%)"></div>
+        <div class="absolute bottom-0 left-0 w-80 h-80 rounded-full opacity-10 blur-3xl" style="background: radial-gradient(circle, #a78bfa, transparent 70%)"></div>
+
+        <div class="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+          <div class="space-y-6">
+            <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-blue-200 text-xs font-semibold tracking-wide">
+              <span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span> Launching Soon
+            </div>
+            <h2 class="text-4xl md:text-5xl font-display font-black leading-tight">
+              Meet <span style="background:linear-gradient(90deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">QuantAI</span>
+            </h2>
+            <p class="text-blue-100 text-lg leading-relaxed">
+              A high-performance computational intelligence engine being engineered to process complex datasets, execute Bayesian models, and deliver enterprise-grade analytical power.
+            </p>
+            <a href="ai.html" class="inline-flex items-center gap-3 px-7 py-3.5 rounded-xl font-bold text-sm text-white transition-all hover:-translate-y-0.5 hover:shadow-xl" style="background: linear-gradient(135deg,#2563eb,#7c3aed); box-shadow: 0 8px 24px rgba(37,99,235,0.4)">
+              <i class="fas fa-microchip"></i> Explore QuantAI
+            </a>
+          </div>
+          <div class="bg-white/5 border border-white/10 rounded-2xl p-6 font-mono text-sm text-gray-300">
+            <div class="flex gap-2 mb-4 pb-4 border-b border-white/10">
+              <div class="w-3 h-3 rounded-full bg-red-400/70"></div>
+              <div class="w-3 h-3 rounded-full bg-yellow-400/70"></div>
+              <div class="w-3 h-3 rounded-full bg-green-400/70"></div>
+            </div>
+<pre class="text-xs sm:text-sm overflow-x-auto">
+<span class="text-blue-400">import</span> quantai
+
+engine = quantai.connect(
+  env=<span class="text-green-400">"production"</span>
+)
+
+result = engine.simulate(
+  dataset=<span class="text-green-400">"global_health_q3"</span>,
+  algorithm=<span class="text-green-400">"bayesian_network"</span>,
+  confidence=<span class="text-purple-400">0.99</span>
+)
+
+<span class="text-blue-400">print</span>(result.insights)
+<span class="text-gray-500"># → High-confidence predictions ready</span></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CONTACT SECTION ────────────────────────────────────────────── -->
+  <section id="contact" class="section-padding px-4 sm:px-6 border-t border-gray-200">
+    <div class="max-w-6xl mx-auto">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
+
+        <!-- Left: Info -->
+        <div class="space-y-8">
+          <div>
+            <div class="label-pill mb-4">Get In Touch</div>
+            <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4 leading-tight">
+              Let's Build Something <span class="text-gradient">Remarkable.</span>
+            </h2>
+            <p class="text-lg text-gray-600 leading-relaxed">
+              Whether you need a data analytics solution, a high-performance web platform, or a consultation on predictive modeling - reach out directly. Response is typically within a few hours.
+            </p>
+          </div>
+
+          <div class="space-y-4">
+            <a href="mailto:amadukamal8@gmail.com" class="flex items-center gap-4 p-5 glass-card group hover:border-primary/30">
+              <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg flex-shrink-0 group-hover:scale-110 transition-transform" style="background:linear-gradient(135deg,#dbeafe,#ede9fe)">
+                <i class="fas fa-envelope text-indigo-600"></i>
+              </div>
+              <div>
+                <p class="text-xs text-gray-400 font-semibold uppercase tracking-wide">Email</p>
+                <p class="font-bold text-gray-900 group-hover:text-primary transition-colors">amadukamal8@gmail.com</p>
+              </div>
+              <i class="fas fa-arrow-right ml-auto text-gray-300 group-hover:text-primary group-hover:translate-x-1 transition-all"></i>
+            </a>
+
+            <a href="https://wa.me/233595586430" target="_blank" class="flex items-center gap-4 p-5 glass-card group hover:border-green-300">
+              <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg flex-shrink-0 group-hover:scale-110 transition-transform" style="background:linear-gradient(135deg,#d1fae5,#a7f3d0)">
+                <i class="fab fa-whatsapp text-green-600"></i>
+              </div>
+              <div>
+                <p class="text-xs text-gray-400 font-semibold uppercase tracking-wide">WhatsApp</p>
+                <p class="font-bold text-gray-900 group-hover:text-green-600 transition-colors">+233 595 586 430</p>
+              </div>
+              <i class="fas fa-arrow-right ml-auto text-gray-300 group-hover:text-green-500 group-hover:translate-x-1 transition-all"></i>
+            </a>
+
+            <a href="https://linkedin.com/in/amadu-kamal-65ab5326a" target="_blank" class="flex items-center gap-4 p-5 glass-card group hover:border-blue-300">
+              <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg flex-shrink-0 group-hover:scale-110 transition-transform" style="background:linear-gradient(135deg,#dbeafe,#bfdbfe)">
+                <i class="fab fa-linkedin-in text-blue-700"></i>
+              </div>
+              <div>
+                <p class="text-xs text-gray-400 font-semibold uppercase tracking-wide">LinkedIn</p>
+                <p class="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">Amadu Kamal</p>
+              </div>
+              <i class="fas fa-arrow-right ml-auto text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all"></i>
+            </a>
+
+            <a href="https://github.com/kamaldeenjnr" target="_blank" class="flex items-center gap-4 p-5 glass-card group hover:border-gray-400">
+              <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg flex-shrink-0 group-hover:scale-110 transition-transform" style="background:linear-gradient(135deg,#f1f5f9,#e2e8f0)">
+                <i class="fab fa-github text-gray-800"></i>
+              </div>
+              <div>
+                <p class="text-xs text-gray-400 font-semibold uppercase tracking-wide">GitHub</p>
+                <p class="font-bold text-gray-900 group-hover:text-gray-700 transition-colors">kamaldeenjnr</p>
+              </div>
+              <i class="fas fa-arrow-right ml-auto text-gray-300 group-hover:text-gray-500 group-hover:translate-x-1 transition-all"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- Right: Contact Form -->
+        <div class="glass-card p-8 md:p-10">
+          <h3 class="text-2xl font-bold text-gray-900 mb-2">Send a Message</h3>
+          <p class="text-sm text-gray-500 mb-8">Fill out the form and it goes straight to Amadu's inbox.</p>
+
+          <form id="contact-form" action="mailto:amadukamal8@gmail.com" method="post" enctype="text/plain" class="space-y-5">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label class="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2" for="cf-name">Full Name</label>
+                <input id="cf-name" name="Name" type="text" required placeholder="Your name"
+                  class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white/80 text-gray-900 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder-gray-400">
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2" for="cf-email">Email Address</label>
+                <input id="cf-email" name="Email" type="email" required placeholder="your@email.com"
+                  class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white/80 text-gray-900 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder-gray-400">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2" for="cf-subject">Subject</label>
+              <select id="cf-subject" name="Subject"
+                class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white/80 text-gray-900 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all">
+                <option value="Data Analytics Project">Data Analytics Project</option>
+                <option value="Web Development">Web Development</option>
+                <option value="Predictive Modeling">Predictive Modeling</option>
+                <option value="Geospatial Analysis">Geospatial Analysis</option>
+                <option value="Collaboration">Collaboration</option>
+                <option value="General Inquiry">General Inquiry</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2" for="cf-message">Message</label>
+              <textarea id="cf-message" name="Message" rows="5" required placeholder="Describe your project or inquiry..."
+                class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white/80 text-gray-900 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder-gray-400 resize-none"></textarea>
+            </div>
+
+            <button type="submit" class="w-full py-4 rounded-xl btn-primary text-white font-bold text-sm flex items-center justify-center gap-3 shadow-lg hover:shadow-xl transition-all">
+              <i class="fas fa-paper-plane"></i> Send Message
+            </button>
+
+            <p class="text-xs text-gray-400 text-center">Or reach out directly via WhatsApp for a faster response.</p>
+          </form>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FOOTER ─────────────────────────────────────────────────────── -->
+  <footer class="bg-gradient-to-br from-dark to-gray-900 text-white py-14 px-4 sm:px-6">
+    <div class="max-w-7xl mx-auto">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-10 pb-10 border-b border-gray-800 mb-8">
+
+        <!-- Brand -->
+        <div class="space-y-4">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-xl overflow-hidden bg-white/10">
+              <img src="images/modellogo.jpg" alt="Logo" class="w-full h-full object-contain">
+            </div>
+            <div>
+              <h3 class="font-bold text-lg">Model Analysis Hub</h3>
+              <p class="text-xs text-blue-300">Founded by Amadu Kamal</p>
+            </div>
+          </div>
+          <p class="text-gray-400 text-sm leading-relaxed">
+            Engineering intelligent data systems at the intersection of mathematics and software.
+          </p>
+        </div>
+
+        <!-- Links -->
+        <div>
+          <h4 class="font-bold text-sm uppercase tracking-wider text-gray-400 mb-4">Navigation</h4>
+          <ul class="space-y-2 text-sm text-gray-300">
+            <li><a href="index.html" class="hover:text-white transition-colors">Home</a></li>
+            <li><a href="projects.html" class="hover:text-white transition-colors">Projects Gallery</a></li>
+            <li><a href="ai.html" class="hover:text-white transition-colors">QuantAI Platform</a></li>
+            <li><a href="founder.html" class="hover:text-white transition-colors">Founder Profile</a></li>
+          </ul>
+        </div>
+
+        <!-- Contact -->
+        <div>
+          <h4 class="font-bold text-sm uppercase tracking-wider text-gray-400 mb-4">Contact</h4>
+          <ul class="space-y-3 text-sm">
+            <li>
+              <a href="mailto:amadukamal8@gmail.com" class="flex items-center gap-3 text-gray-300 hover:text-white transition-colors">
+                <i class="fas fa-envelope text-blue-400 w-4"></i> amadukamal8@gmail.com
+              </a>
+            </li>
+            <li>
+              <a href="https://wa.me/233595586430" target="_blank" class="flex items-center gap-3 text-gray-300 hover:text-white transition-colors">
+                <i class="fab fa-whatsapp text-green-400 w-4"></i> +233 595 586 430
+              </a>
+            </li>
+            <li>
+              <a href="https://linkedin.com/in/amadu-kamal-65ab5326a" target="_blank" class="flex items-center gap-3 text-gray-300 hover:text-white transition-colors">
+                <i class="fab fa-linkedin-in text-blue-400 w-4"></i> LinkedIn
+              </a>
+            </li>
+            <li>
+              <a href="https://github.com/kamaldeenjnr" target="_blank" class="flex items-center gap-3 text-gray-300 hover:text-white transition-colors">
+                <i class="fab fa-github text-gray-400 w-4"></i> GitHub
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-500">
+        <p>&copy; 2025 Model Analysis Hub. All rights reserved.</p>
+        <div class="flex gap-4">
+          <a href="https://linkedin.com/in/amadu-kamal-65ab5326a" target="_blank" class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-blue-600 transition-colors"><i class="fab fa-linkedin-in text-xs"></i></a>
+          <a href="https://github.com/kamaldeenjnr" target="_blank" class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-gray-600 transition-colors"><i class="fab fa-github text-xs"></i></a>
+          <a href="https://wa.me/233595586430" target="_blank" class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-green-500 transition-colors"><i class="fab fa-whatsapp text-xs"></i></a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- QuantAI Chatbot -->
+  <script src="scroll-animations.js"></script>
+  <script src="quantai.js"></script>
+</body>
+</html>
+
