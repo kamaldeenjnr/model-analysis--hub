@@ -3,7 +3,7 @@
    If it is empty, slow or unavailable, the built-in knowledge base below answers instead. */
 (function () {
   'use strict';
-  var AI_URL = '';   // e.g. 'https://mah-assistant.YOUR-NAME.workers.dev'
+  var AI_URL = 'https://mah-assistant.kamalamadu8.workers.dev';
   var WA = 'https://wa.me/233595586430', MAIL = 'amadukamal8@gmail.com';
 
   var KB = [
@@ -100,7 +100,7 @@
   wrap.innerHTML =
     '<button class="asst-btn" type="button" aria-expanded="false" aria-controls="asst">' + chatIcon + '<span>Ask a question</span></button>' +
     '<section class="asst" id="asst" role="dialog" aria-label="Questions about Amadu Kamal" hidden>' +
-      '<div class="asst-h"><div style="display:flex;gap:.65rem;align-items:center"><img src="assets/img/amadu-kamal-480.webp" alt=""><div><b>Ask about Amadu</b><small>Quick answers about his work</small></div></div><button class="asst-x" type="button" aria-label="Close">&times;</button></div>' +
+      '<div class="asst-h"><div style="display:flex;gap:.65rem;align-items:center"><img src="assets/img/amadu-kamal-480.webp" alt=""><div><b>Ask about Amadu</b><small>AI assistant · answers about his work</small></div></div><button class="asst-x" type="button" aria-label="Close">&times;</button></div>' +
       '<div class="asst-log" aria-live="polite"></div>' +
       '<div class="asst-chips"><button type="button">What services do you offer?</button><button type="button">Show me projects</button><button type="button">What is QuantAI?</button><button type="button">How do I contact you?</button></div>' +
       '<form class="asst-f"><label class="sr" for="asst-q">Your question</label><input id="asst-q" type="text" autocomplete="off" placeholder="Type a question…" maxlength="300"><button type="submit" aria-label="Send">' + sendIcon + '</button></form>' +
