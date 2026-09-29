@@ -178,9 +178,9 @@ p:last-child { margin-bottom: 0; }
 /* ---------- Case study ---------- */
 .case { display: grid; grid-template-columns: 1.05fr 1fr; gap: clamp(2rem, 5vw, 4rem); align-items: start; }
 .case .fig-main { position: sticky; top: 96px; }
-.case dl { display: grid; grid-template-columns: auto 1fr; gap: .5rem 1.25rem; margin: 1.5rem 0 1.75rem; font-size: .95rem; }
-.case dt { font-family: var(--f-mono); font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--steel); padding-top: .2rem; }
-.case dd { margin: 0; }
+.case dl, .client dl { display: grid; grid-template-columns: auto 1fr; gap: .5rem 1.25rem; margin: 1.5rem 0 1.75rem; font-size: .95rem; }
+.case dt, .client dt { font-family: var(--f-mono); font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--steel); padding-top: .2rem; }
+.case dd, .client dd { margin: 0; }
 .fig-strip { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.5rem; }
 .fig-strip .fig figcaption { font-size: .82rem; padding: .65rem .8rem; }
 @media (max-width: 900px) { .case { grid-template-columns: 1fr; } .case .fig-main { position: static; } }
@@ -281,3 +281,40 @@ p:last-child { margin-bottom: 0; }
   .rv { opacity: 1; transform: none; transition: none; }
   *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
+
+/* Hero headline as a statement, not a name */
+.hero h1.statement { font-size: clamp(2.4rem, 5.2vw, 4.2rem); line-height: 1.02; max-width: 16ch; }
+.hero .lead b { color: var(--ink); font-weight: 600; }
+
+/* Proof strip */
+.proof { border-block: 1px solid var(--line); background: #fff; }
+.proof ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); }
+.proof li { padding: 1.5rem 1.25rem; border-left: 1px solid var(--line); }
+.proof li:first-child { border-left: 0; padding-left: 0; }
+.proof b { display: block; font-family: var(--f-display); font-weight: 800; font-size: clamp(1.7rem, 3vw, 2.2rem); line-height: 1; color: var(--ink); letter-spacing: -.02em; }
+.proof span { display: block; margin-top: .45rem; font-size: .9rem; color: var(--steel); line-height: 1.4; }
+@media (max-width: 760px) {
+  .proof ul { grid-template-columns: 1fr 1fr; }
+  .proof li { padding: 1.1rem 1rem; }
+  .proof li:nth-child(odd) { border-left: 0; padding-left: 0; }
+  .proof li:nth-child(n+3) { border-top: 1px solid var(--line); }
+}
+
+/* Client case: desktop + phone screenshots */
+.client { display: grid; grid-template-columns: 1.35fr 1fr; gap: clamp(2rem, 5vw, 4rem); align-items: center; }
+.devices { position: relative; padding-bottom: 2.5rem; padding-right: 2.5rem; }
+.devices .desk { border-radius: var(--r-lg); overflow: hidden; border: 1px solid var(--line); box-shadow: var(--shadow); background: #fff; }
+.devices .desk .bar { display: flex; gap: 6px; align-items: center; padding: .55rem .8rem; border-bottom: 1px solid var(--line); background: var(--silver-2); font-family: var(--f-mono); font-size: .72rem; color: var(--steel); }
+.devices .desk .bar i { width: 9px; height: 9px; border-radius: 50%; background: #D5DBE3; display: inline-block; }
+.devices .desk .bar span { margin-left: .6rem; }
+.devices .desk img { display: block; width: 100%; height: auto; }
+.devices .phone { position: absolute; right: 0; bottom: 0; width: 26%; border-radius: 18px; overflow: hidden; border: 5px solid var(--navy); box-shadow: var(--shadow); background: #fff; }
+.devices .phone img { display: block; width: 100%; height: auto; }
+.delivered { list-style: none; padding: 0; margin: 1.2rem 0 1.6rem; display: grid; gap: .7rem; }
+.delivered li { display: flex; gap: .65rem; align-items: flex-start; color: var(--ink-2); }
+.delivered .icon { flex: none; width: 1.1em; height: 1.1em; margin-top: .2em; color: var(--signal); }
+.evidence { margin: 1.5rem 0 0; }
+.evidence img { display: block; width: 100%; height: auto; border-radius: var(--r); border: 1px solid var(--line); }
+.evidence figcaption { font-size: .85rem; color: var(--steel); margin-top: .5rem; }
+@media (max-width: 900px) { .client { grid-template-columns: 1fr; } }
+.client h2 { font-size: clamp(2rem, 4vw, 2.8rem); }
