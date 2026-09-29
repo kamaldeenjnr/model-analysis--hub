@@ -1,655 +1,199 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Model Analysis Hub | Data Analytics & AI Solutions</title>
-  <meta name="description" content="Model Analysis Hub is an advanced data analytics, AI, and software engineering studio founded by Amadu Kamal. We build intelligent digital systems." />
-  <meta name="keywords" content="Data Analytics, Web Development, Statistical Modeling, Dashboards, Model Analysis Hub, QuantAI, Amadu Kamal, Ghana" />
-  <meta name="author" content="Amadu Kamal" />
-
-  <!-- Open Graph -->
-  <meta property="og:title" content="Model Analysis Hub" />
-  <meta property="og:description" content="Advanced analytics, AI systems, and web engineering. Founded by Amadu Kamal." />
-  <meta property="og:type" content="website" />
-
-  <!-- Favicon -->
-  <link rel="icon" href="favicon.ico" type="image/x-icon">
-  <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
-
-  <!-- Schema.org Organization -->
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "Organization",
-    "name": "Model Analysis Hub",
-    "url": "https://modelanalysishub.com",
-    "logo": "https://modelanalysishub.com/images/modellogo.jpg",
-    "description": "Data analytics, AI systems, and web development studio providing intelligent digital solutions.",
-    "founder": {
-      "@type": "Person",
-      "name": "Amadu Kamal",
-      "email": "amadukamal8@gmail.com",
-      "telephone": "+233595586430"
-    },
-    "sameAs": [
-      "https://www.linkedin.com/in/amadu-kamal-65ab5326a",
-      "https://github.com/kamaldeenjnr"
-    ]
-  }
-  </script>
-
-  <!-- Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@700;900&display=swap" rel="stylesheet">
-
-  <!-- Icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: { primary: '#2563eb', secondary: '#7c3aed', accent: '#06b6d4', dark: '#0f172a' },
-          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'], display: ['Outfit', 'sans-serif'] },
-          animation: {
-            float: 'float 7s ease-in-out infinite',
-            'pulse-slow': 'pulse 3s ease-in-out infinite',
-            gradient: 'gradient 15s ease infinite',
-            'slide-up': 'slideUp 0.6s ease-out both',
-            'fade-in': 'fadeIn 0.8s ease both',
-          },
-          keyframes: {
-            float: { '0%,100%': { transform: 'translateY(0)' }, '50%': { transform: 'translateY(-18px)' } },
-            slideUp: { '0%': { transform: 'translateY(24px)', opacity: '0' }, '100%': { transform: 'translateY(0)', opacity: '1' } },
-            fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } },
-            gradient: { '0%,100%': { 'background-position': '0% 50%' }, '50%': { 'background-position': '100% 50%' } },
-          }
-        }
-      }
-    }
-  </script>
-
-  <style>
-    html { scroll-behavior: smooth; }
-
-    body {
-      background: linear-gradient(-45deg, #f8fafc, #e0f2fe, #fdf4ff, #f0f9ff);
-      background-size: 400% 400%;
-      animation: gradient 15s ease infinite;
-      min-height: 100vh;
-      color: #1e293b;
-    }
-
-    .section-padding { padding-top: 5rem; padding-bottom: 5rem; }
-
-    .gradient-bg {
-      background: linear-gradient(135deg, rgba(248,250,252,0.92) 0%, rgba(224,242,254,0.92) 100%);
-      backdrop-filter: blur(10px);
-    }
-
-    .text-gradient {
-      background: linear-gradient(90deg, #2563eb 0%, #7c3aed 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    .btn-primary {
-      background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
-      transition: all 0.3s ease;
-    }
-    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(37, 99, 235, 0.35); }
-
-    .glass-card {
-      background: rgba(255, 255, 255, 0.78);
-      backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.9);
-      border-radius: 1.5rem;
-      box-shadow: 0 8px 28px rgba(0,0,0,0.06);
-      transition: all 0.35s ease;
-    }
-    .glass-card:hover { transform: translateY(-8px); box-shadow: 0 24px 48px rgba(37, 99, 235, 0.1); border-color: rgba(37,99,235,0.2); }
-
-    /* Bar chart decorative */
-    .bar-chart { display: flex; align-items: flex-end; height: 110px; gap: 10px; padding: 8px 0; }
-    .bar {
-      flex: 1; border-radius: 6px 6px 0 0;
-      background: linear-gradient(to top, #2563eb, #7c3aed);
-      animation: barGrow 1.2s ease-out both;
-    }
-    @keyframes barGrow { from { transform: scaleY(0); transform-origin: bottom; } to { transform: scaleY(1); transform-origin: bottom; } }
-
-    /* Stats counters */
-    .stat-card {
-      background: rgba(255,255,255,0.7);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255,255,255,0.85);
-      border-radius: 16px;
-      padding: 24px;
-      text-align: center;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.05);
-    }
-
-    /* Project overlay cards */
-    .proj-card-hero {
-      position: relative; overflow: hidden;
-      border-radius: 20px; border: 1px solid rgba(255,255,255,0.5);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-      transition: all 0.35s ease;
-    }
-    .proj-card-hero:hover { transform: translateY(-6px); box-shadow: 0 20px 48px rgba(37,99,235,0.15); }
-    .proj-card-hero img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease; display: block; }
-    .proj-card-hero:hover img { transform: scale(1.05); }
-    .proj-overlay {
-      position: absolute; inset: 0;
-      background: linear-gradient(to top, rgba(15,23,42,0.92) 0%, rgba(15,23,42,0.4) 55%, transparent 100%);
-      display: flex; flex-direction: column; justify-content: flex-end; padding: 28px;
-    }
-
-    /* Section label */
-    .label-pill {
-      display: inline-flex; align-items: center; gap: 6px;
-      background: white; border: 1px solid #e2e8f0;
-      border-radius: 999px; padding: 5px 14px;
-      font-size: 12px; font-weight: 700; color: #2563eb;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amadu Kamal – Data Scientist &amp; Software Engineer in Ghana</title>
+<meta name="description" content="Amadu Kamal is a Ghanaian data scientist and software engineer. Through Model Analysis Hub he builds statistical models, malaria risk maps, dashboards and web platforms. Try QuantAI, his free data tool.">
+<meta name="author" content="Amadu Kamal">
+<link rel="canonical" href="https://modelanalysishub.com/">
+<meta name="theme-color" content="#0C203B">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Model Analysis Hub">
+<meta property="og:title" content="Amadu Kamal – Data Scientist &amp; Software Engineer in Ghana">
+<meta property="og:description" content="Amadu Kamal is a Ghanaian data scientist and software engineer. Through Model Analysis Hub he builds statistical models, malaria risk maps, dashboards and web platforms. Try QuantAI, his free data tool.">
+<meta property="og:url" content="https://modelanalysishub.com/">
+<meta property="og:image" content="https://modelanalysishub.com/assets/img/og-amadu-kamal.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Amadu Kamal, founder of Model Analysis Hub">
+<meta property="og:locale" content="en_GB">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Amadu Kamal – Data Scientist &amp; Software Engineer in Ghana">
+<meta name="twitter:description" content="Amadu Kamal is a Ghanaian data scientist and software engineer. Through Model Analysis Hub he builds statistical models, malaria risk maps, dashboards and web platforms. Try QuantAI, his free data tool.">
+<meta name="twitter:image" content="https://modelanalysishub.com/assets/img/og-amadu-kamal.jpg">
+<link rel="icon" href="favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="assets/img/favicon-64.png">
+<link rel="apple-touch-icon" href="assets/img/logo-mark.png">
+<link rel="preload" href="assets/fonts/bricolage-grotesque-latin-800-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/bricolage-grotesque-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/ibm-plex-mono-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/css/site.css">
+<script type="application/ld+json">{"@context": "https://schema.org", "@graph": [{"@type": "WebSite", "@id": "https://modelanalysishub.com/#website", "url": "https://modelanalysishub.com/", "name": "Model Analysis Hub", "alternateName": "Amadu Kamal", "publisher": {"@id": "https://modelanalysishub.com/#org"}, "inLanguage": "en"}, {"@type": "Organization", "@id": "https://modelanalysishub.com/#org", "name": "Model Analysis Hub", "url": "https://modelanalysishub.com/", "logo": "https://modelanalysishub.com/images/modellogo.jpg", "founder": {"@id": "https://modelanalysishub.com/#amadu-kamal"}, "email": "amadukamal8@gmail.com", "areaServed": "Worldwide", "address": {"@type": "PostalAddress", "addressCountry": "GH"}, "sameAs": ["https://github.com/kamaldeenjnr", "https://www.linkedin.com/in/amadu-kamal-65ab5326a"], "description": "Data analytics and software studio founded by Amadu Kamal: statistical and geospatial models, dashboards and web platforms."}, {"@type": "Person", "@id": "https://modelanalysishub.com/#amadu-kamal", "name": "Amadu Kamal", "alternateName": ["Amadu Kamal Jnr", "Kamal Amadu", "kamaldeenjnr"], "jobTitle": "Data Scientist and Software Engineer", "description": "Amadu Kamal is a Ghanaian data scientist and software engineer, founder of Model Analysis Hub. He builds statistical and geospatial models, dashboards and web platforms, and created QuantAI.", "image": "https://modelanalysishub.com/assets/img/amadu-kamal.jpg", "url": "https://modelanalysishub.com/founder.html", "email": "mailto:amadukamal8@gmail.com", "telephone": "+233595586430", "nationality": {"@type": "Country", "name": "Ghana"}, "homeLocation": {"@type": "Country", "name": "Ghana"}, "worksFor": {"@id": "https://modelanalysishub.com/#org"}, "knowsAbout": ["Data science", "Statistical modelling", "Predictive modelling", "Geospatial analysis", "Malaria risk mapping", "Python", "R", "ArcGIS", "GeoPandas", "JavaScript", "React", "SQL", "Dashboards", "Web development"], "sameAs": ["https://www.linkedin.com/in/amadu-kamal-65ab5326a", "https://github.com/kamaldeenjnr"]}, {"@type": "WebPage", "@id": "https://modelanalysishub.com/#webpage", "url": "https://modelanalysishub.com/", "name": "Amadu Kamal | Model Analysis Hub", "isPartOf": {"@id": "https://modelanalysishub.com/#website"}, "about": {"@id": "https://modelanalysishub.com/#amadu-kamal"}, "primaryImageOfPage": "https://modelanalysishub.com/assets/img/amadu-kamal.jpg"}]}</script>
 </head>
-<body class="font-sans selection:bg-blue-200">
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true"><symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14" /> <path d="m12 5 7 7-7 7" /></symbol><symbol id="i-arrow-up-right" viewBox="0 0 24 24"><path d="M7 7h10v10" /> <path d="M7 17 17 7" /></symbol><symbol id="i-b-github" viewBox="0 0 24 24"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></symbol><symbol id="i-b-linkedin" viewBox="0 0 24 24"><path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5zM3 9.75h4v11H3zM9.5 9.75h3.8v1.6h.06c.53-.95 1.83-1.95 3.77-1.95 4.03 0 4.77 2.55 4.77 5.87v5.48h-4v-4.86c0-1.16-.02-2.65-1.66-2.65-1.66 0-1.92 1.26-1.92 2.57v4.94h-4z"/></symbol><symbol id="i-b-whatsapp" viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/></symbol><symbol id="i-calendar" viewBox="0 0 24 24"><path d="M8 2v3" /> <path d="M16 2v3" /> <rect x="3" y="3" width="18" height="18" rx="2" /> <path d="M3 9h18" /></symbol><symbol id="i-chart-line" viewBox="0 0 24 24"><path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="m19 9-5 5-4-4-3 3" /></symbol><symbol id="i-chart-scatter" viewBox="0 0 24 24"><circle cx="7.5" cy="7.5" r=".5" fill="currentColor" /> <circle cx="18.5" cy="5.5" r=".5" fill="currentColor" /> <circle cx="11.5" cy="11.5" r=".5" fill="currentColor" /> <circle cx="7.5" cy="16.5" r=".5" fill="currentColor" /> <circle cx="17.5" cy="14.5" r=".5" fill="currentColor" /> <path d="M3 3v16a2 2 0 0 0 2 2h16" /></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol><symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></symbol><symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6" /> <path d="m8 6-6 6 6 6" /></symbol><symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /> <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></symbol><symbol id="i-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3" /> <path d="M3 5V19A9 3 0 0 0 21 19V5" /> <path d="M3 12A9 3 0 0 0 21 12" /></symbol><symbol id="i-download" viewBox="0 0 24 24"><path d="M12 15V3" /> <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /> <path d="m7 10 5 5 5-5" /></symbol><symbol id="i-file-spreadsheet" viewBox="0 0 24 24"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" /> <path d="M14 2v5a1 1 0 0 0 1 1h5" /> <path d="M8 13h2" /> <path d="M14 13h2" /> <path d="M8 17h2" /> <path d="M14 17h2" /></symbol><symbol id="i-flask-conical" viewBox="0 0 24 24"><path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2" /> <path d="M6.453 15h11.094" /> <path d="M8.5 2h7" /></symbol><symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /> <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /> <path d="M2 12h20" /></symbol><symbol id="i-grid-3x3" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /> <path d="M3 9h18" /> <path d="M3 15h18" /> <path d="M9 3v18" /> <path d="M15 3v18" /></symbol><symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /> <path d="M12 16v-4" /> <path d="M12 8h.01" /></symbol><symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z" /> <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12" /> <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17" /></symbol><symbol id="i-lightbulb" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" /> <path d="M9 18h6" /> <path d="M10 22h4" /></symbol><symbol id="i-mail" viewBox="0 0 24 24"><path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" /> <rect x="2" y="4" width="20" height="16" rx="2" /></symbol><symbol id="i-map" viewBox="0 0 24 24"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" /> <path d="M15 5.764v15" /> <path d="M9 3.236v15" /></symbol><symbol id="i-map-pin" viewBox="0 0 24 24"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" /> <circle cx="12" cy="10" r="3" /></symbol><symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 5h16" /> <path d="M4 12h16" /> <path d="M4 19h16" /></symbol><symbol id="i-message-circle" viewBox="0 0 24 24"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719" /></symbol><symbol id="i-printer" viewBox="0 0 24 24"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /> <path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6" /> <rect x="6" y="14" width="12" height="8" rx="1" /></symbol><symbol id="i-refresh-cw" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" /></symbol><symbol id="i-send" viewBox="0 0 24 24"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" /> <path d="m21.854 2.147-10.94 10.939" /></symbol><symbol id="i-shield-check" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /> <path d="m9 12 2 2 4-4" /></symbol><symbol id="i-sigma" viewBox="0 0 24 24"><path d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2" /></symbol><symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" /> <path d="M20 2v4" /> <path d="M22 4h-4" /> <circle cx="4" cy="20" r="2" /></symbol><symbol id="i-table" viewBox="0 0 24 24"><path d="M12 3v18" /> <rect width="18" height="18" x="3" y="3" rx="2" /> <path d="M3 9h18" /> <path d="M3 15h18" /></symbol><symbol id="i-trending-up" viewBox="0 0 24 24"><path d="M16 7h6v6" /> <path d="m22 7-8.5 8.5-5-5L2 17" /></symbol><symbol id="i-triangle-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /></symbol><symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 3v12" /> <path d="m17 8-5-5-5 5" /> <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /></symbol><symbol id="i-user-round" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5" /> <path d="M20 21a8 8 0 0 0-16 0" /></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></symbol></svg>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap head-in">
+    <a class="brand" href="index.html" aria-label="Model Analysis Hub by Amadu Kamal, home">
+      <img src="assets/img/logo-mark.webp" alt="" width="40" height="40">
+      <span><b>Model Analysis Hub</b><small>by Amadu Kamal</small></span>
+    </a>
+    <nav class="nav" id="nav" aria-label="Main"><ul><li><a href="projects.html">Work</a></li><li><a href="ai.html">QuantAI</a></li><li><a href="founder.html">About</a></li><li><a href="index.html#contact">Contact</a></li></ul></nav>
+    <div class="head-cta">
+      <a class="btn btn-navy" href="https://wa.me/233595586430" target="_blank" rel="noopener"><svg class="icon solid" aria-hidden="true"><use href="#i-b-whatsapp"/></svg>Message me</a>
+      <button class="menu-btn" type="button" aria-controls="nav" aria-expanded="false" aria-label="Open menu"><svg class="icon i-open" aria-hidden="true"><use href="#i-menu"/></svg><svg class="icon i-close" aria-hidden="true"><use href="#i-x"/></svg></button>
+    </div>
+  </div>
+</header>
+<main id="main">
 
-  <!-- ── NAVIGATION ──────────────────────────────────────────────────── -->
-  <header class="sticky top-0 z-50 bg-white/82 backdrop-blur-lg border-b border-gray-200/80 shadow-sm">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-      <a href="index.html" class="flex items-center gap-3 group">
-        <div class="w-12 h-12 rounded-xl overflow-hidden shadow-md group-hover:shadow-lg transition-all">
-          <img src="images/modellogo.jpg" alt="Model Analysis Hub Logo" class="w-full h-full object-contain">
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="label">Data scientist · Software engineer · Ghana</p>
+      <h1>Amadu Kamal<span class="role">I build statistical models, maps and web tools that make data useful.</span></h1>
+      <p class="lead">Model Analysis Hub is where I do that work: predictive and risk models, geospatial analysis, dashboards and full web platforms. If you have data and a question, I can help you answer it.</p>
+      <div class="btn-row">
+        <a class="btn btn-navy" href="projects.html">See my work <svg class="icon go" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>
+        <a class="btn btn-line" href="ai.html"><svg class="icon" aria-hidden="true"><use href="#i-sparkles"/></svg>Try QuantAI, free</a>
+      </div>
+      <div class="facts"><span><svg class="icon" aria-hidden="true"><use href="#i-map-pin"/></svg>Based in Ghana</span><span><svg class="icon" aria-hidden="true"><use href="#i-code"/></svg>Python · R · JavaScript</span><span><svg class="icon" aria-hidden="true"><use href="#i-map"/></svg>ArcGIS · GeoPandas</span></div>
+    </div>
+    <div class="hero-photo">
+      <figure><picture><source type="image/webp" srcset="assets/img/amadu-kamal-480.webp 480w, assets/img/amadu-kamal.webp 900w" sizes="(max-width: 900px) 90vw, 420px"><img src="assets/img/amadu-kamal.jpg" alt="Amadu Kamal, data scientist and founder of Model Analysis Hub" width="900" height="900" fetchpriority="high" decoding="async"></picture></figure>
+      <p class="tag"><b>Amadu Kamal</b><span>Founder, Model Analysis Hub</span></p>
+    </div>
+  </div>
+</section>
+
+<section class="section on-white">
+  <div class="wrap">
+    <div class="split-head">
+      <div class="rv"><p class="label">What I do</p><h2>Three kinds of work, one goal: decisions you can defend.</h2></div>
+      <p class="lead rv">I start from the question you need answered, pick the method that fits, and check the result against reality before handing it over.</p>
+    </div>
+    <div class="services">
+      <div class="service rv"><h3>Statistical &amp; predictive models</h3><p>Forecasts and risk models built on sound statistics, then tested against what actually happened so you know how far to trust them.</p><p class="uses">R · Python · NumPy · SciPy<br>e.g. <a href="projects.html#model-validation">model validation for malaria prevalence</a></p></div>
+      <div class="service rv"><h3>Geospatial analysis</h3><p>Maps that show where a problem is concentrated, so money, staff and supplies go to the places that need them most.</p><p class="uses">ArcGIS · GeoPandas<br>e.g. <a href="projects.html#malaria-risk">malaria risk across Ghana</a></p></div>
+      <div class="service rv"><h3>Dashboards &amp; web platforms</h3><p>Dashboards and web apps that put the numbers in front of the people who need them, in a form they will actually use.</p><p class="uses">JavaScript · React · SQL<br>e.g. <a href="projects.html#projectflow">ProjectFlow</a></p></div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="split-head">
+      <div class="rv"><p class="label">Selected work</p><h2>Mapping malaria risk across Ghana.</h2></div>
+      <p class="lead rv">A spatial model that combines climate and population data to estimate malaria risk for each region, and how likely each region is to cross a high-burden threshold.</p>
+    </div>
+    <div class="case">
+      <figure class="fig fig-main rv"><picture><source type="image/webp" srcset="assets/img/ghana-malaria-risk-map-800.webp 800w, assets/img/ghana-malaria-risk-map.webp 1600w" sizes="(max-width: 900px) 100vw, 560px"><img src="assets/img/ghana-malaria-risk-map.jpg" alt="Map of Ghana showing predicted malaria risk by region, with the highest risk in the Ashanti and Western regions" width="1600" height="1807" loading="lazy" decoding="async"></picture><figcaption><b>Fig. 1</b>Predicted malaria risk by region, relative ranking. Darker regions carry the highest predicted risk.</figcaption></figure>
+      <div class="rv">
+        <p>Health teams can't be everywhere at once. The point of this model is to rank Ghana's regions by predicted malaria risk, so bed nets, testing and treatment can be planned around where the burden is likely to be heaviest.</p>
+        <dl><dt>Type</dt><dd>Geospatial epidemiology</dd><dt>Tools</dt><dd>Python, R, ArcGIS, GeoPandas</dd><dt>Outputs</dt><dd>Risk ranking, exceedance probability, validation</dd><dt>Year</dt><dd>2025</dd></dl>
+        <div class="fig-strip">
+          <figure class="fig"><picture><source type="image/webp" srcset="assets/img/ghana-malaria-exceedance-probability-800.webp 800w, assets/img/ghana-malaria-exceedance-probability.webp 1600w" sizes="(max-width: 900px) 50vw, 260px"><img src="assets/img/ghana-malaria-exceedance-probability.jpg" alt="Map of the probability that malaria prevalence exceeds 30 percent in each region of Ghana" width="1600" height="1814" loading="lazy" decoding="async"></picture><figcaption><b>Fig. 2</b>Probability that prevalence exceeds 30%.</figcaption></figure>
+          <figure class="fig"><picture><source type="image/webp" srcset="assets/img/ghana-malaria-observed-vs-predicted-800.webp 800w, assets/img/ghana-malaria-observed-vs-predicted.webp 1600w" sizes="(max-width: 900px) 50vw, 260px"><img src="assets/img/ghana-malaria-observed-vs-predicted.jpg" alt="Side-by-side maps comparing observed and predicted malaria prevalence in Ghana" width="1600" height="783" loading="lazy" decoding="async"></picture><figcaption><b>Fig. 3</b>Observed vs. predicted prevalence.</figcaption></figure>
         </div>
-        <div>
-          <p class="text-lg font-bold text-dark leading-tight">Model Analysis Hub</p>
-          <p class="text-xs text-gray-400">Research & AI Solutions</p>
-        </div>
-      </a>
-
-      <nav class="hidden md:flex items-center gap-8 text-sm font-medium">
-        <a href="index.html" class="text-primary">Home</a>
-        <a href="#solutions" class="text-gray-600 hover:text-primary transition-colors">Solutions</a>
-        <a href="projects.html" class="text-gray-600 hover:text-primary transition-colors">Projects</a>
-        <a href="ai.html" class="text-gray-600 hover:text-primary transition-colors">QuantAI</a>
-        <a href="founder.html" class="text-gray-600 hover:text-primary transition-colors">Founder</a>
-      </nav>
-
-      <div class="flex items-center gap-3">
-        <a href="https://wa.me/233595586430" target="_blank" class="hidden sm:flex items-center gap-2 px-4 py-2.5 rounded-lg bg-green-500 hover:bg-green-600 text-white font-semibold text-sm transition-all hover:-translate-y-0.5">
-          <i class="fab fa-whatsapp"></i> WhatsApp
-        </a>
-        <a href="mailto:amadukamal8@gmail.com" class="px-5 py-2.5 rounded-lg btn-primary text-white font-semibold text-sm shadow-md transition-all">
-          Contact
-        </a>
+        <p style="margin-top:1.5rem"><a class="link" href="projects.html#malaria-risk">Read the full case study <svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></a></p>
       </div>
     </div>
-  </header>
+    <div class="cards" style="margin-top:clamp(3rem,6vw,4.5rem)">
+      <a class="card rv" href="projects.html#healthcare-dashboard"><div class="shot"><picture><source type="image/webp" srcset="assets/img/healthcare-utilization-dashboard.webp" sizes="(max-width: 760px) 100vw, 560px"><img src="assets/img/healthcare-utilization-dashboard.jpg" alt="Healthcare utilisation dashboard with charts of cost by diagnosis, risk categories and patient outcomes" width="738" height="429" loading="lazy" decoding="async"></picture></div><div class="body"><span class="kind">Dashboard</span><h3>Healthcare utilisation dashboard</h3><p>Cost, length of stay, diagnoses and outcomes by region and facility type, with filters so managers can answer their own questions.</p><ul class="tags"><li>Dashboard design</li><li>Health data</li></ul></div></a>
+      <a class="card rv" href="projects.html#projectflow"><div class="shot"><picture><source type="image/webp" srcset="assets/img/projectflow-platform-700.webp 700w, assets/img/projectflow-platform.webp 1348w" sizes="(max-width: 760px) 100vw, 560px"><img src="assets/img/projectflow-platform.jpg" alt="ProjectFlow homepage: The Future of Academic Project Management" width="1348" height="632" loading="lazy" decoding="async"></picture></div><div class="body"><span class="kind">Web platform</span><h3>ProjectFlow</h3><p>A full-stack platform for managing university research projects at Undergraduate, Master's and PhD level, from first draft to final publication.</p><ul class="tags"><li>HTML/CSS</li><li>JavaScript</li><li>SQL</li></ul></div></a>
+    </div>
+  </div>
+</section>
 
-  <!-- ── HERO ───────────────────────────────────────────────────────── -->
-  <section class="section-padding gradient-bg">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6">
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+<section class="section on-navy">
+  <div class="wrap qband">
+    <div class="rv">
+      <p class="label">QuantAI · free tool</p>
+      <h2>Drop in a spreadsheet. Get answers in plain English.</h2>
+      <p class="lead">QuantAI is the data tool I built for people who have numbers but not the time to analyse them. It reads your file and tells you what stands out.</p>
+      <ul class="checks">
+        <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span>Summary, charts and data-quality checks for every column</span></li>
+        <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span>Correlations, regression and predictions, explained in words</span></li>
+        <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span>Forecasts that pick up seasonal patterns</span></li>
+        <li><svg class="icon" aria-hidden="true"><use href="#i-shield-check"/></svg><span>Runs in your browser. Your file never leaves your computer.</span></li>
+      </ul>
+      <a class="btn btn-light" href="ai.html">Open QuantAI <svg class="icon go" aria-hidden="true"><use href="#i-arrow-right"/></svg></a>
+    </div>
+    <div class="panel rv" role="figure" aria-label="Example QuantAI result">
+      <div class="row"><span>example_health_data.csv</span><b>48 rows · 6 columns</b></div>
+      <svg viewBox="0 0 400 150" role="img" aria-label="Example forecast chart: monthly values with a seasonal pattern and a highlighted forecast"><line x1="10" x2="390" y1="30" y2="30" stroke="rgba(255,255,255,.08)"/><line x1="10" x2="390" y1="70" y2="70" stroke="rgba(255,255,255,.08)"/><line x1="10" x2="390" y1="110" y2="110" stroke="rgba(255,255,255,.08)"/><polyline points="10.0,120.8 23.1,110.0 36.2,72.8 49.3,67.6 62.4,58.7 75.5,29.0 88.6,28.0 101.7,41.7 114.8,41.2 127.9,62.0 141.0,79.4 154.1,120.4 167.2,108.6 180.3,127.4 193.4,115.6 206.6,106.7 219.7,39.8 232.8,24.3 245.9,37.5 259.0,55.4 272.1,49.7 285.2,75.6 298.3,122.7 311.4,104.8" fill="none" stroke="#C9D1DC" stroke-width="2.2" stroke-linejoin="round"/><polyline points="311.4,104.8 324.5,135.4 337.6,119.1 350.7,102.5 363.8,88.5 376.9,50.9 390.0,22.9" fill="none" stroke="#F08A74" stroke-width="2.6" stroke-dasharray="5 4" stroke-linejoin="round"/><text x="317" y="20" fill="#F08A74" font-family="Plex Mono, monospace" font-size="11">forecast</text></svg>
+      <div class="row"><span>Strongest link</span><b>rainfall ↔ cases, r = 0.96</b></div>
+      <div class="row"><span>Regression fit</span><b>R² = 0.94</b></div>
+      <div class="row" style="border:0"><span>Forecast</span><b>seasonal peak expected mid-year</b></div>
+    </div>
+  </div>
+</section>
 
-        <!-- Left: Copy -->
-        <div class="space-y-7 animate-slide-up">
-          <div class="label-pill">
-            <span class="w-2 h-2 rounded-full bg-primary animate-pulse-slow"></span>
-            Data-Driven · Innovative · Powerful
-          </div>
+<section class="section">
+  <div class="wrap about">
+    <figure class="rv"><picture><source type="image/webp" srcset="assets/img/amadu-kamal-portrait-480.webp 480w, assets/img/amadu-kamal-portrait.webp 900w" sizes="(max-width: 820px) 360px, 420px"><img src="assets/img/amadu-kamal-portrait.jpg" alt="Amadu Kamal in a navy suit at an evening event" width="900" height="1222" loading="lazy" decoding="async"></picture></figure>
+    <div class="rv">
+      <p class="label">About me</p>
+      <blockquote>I didn't come into tech through a lecture hall. I learned by building things, asking people who knew more than me, and building again.</blockquote>
+      <p class="lead">For the past five years I've taught myself statistics, mapping and software engineering, mostly by working on real problems. Model Analysis Hub is the result: a small studio that takes research-grade methods and turns them into tools people can use.</p>
+      <p><a class="link" href="founder.html">More about me <svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></a></p>
+    </div>
+  </div>
+</section>
 
-          <h1 class="font-display text-5xl md:text-6xl lg:text-7xl font-black leading-tight tracking-tight">
-            Advanced Analytics &<br>
-            <span class="text-gradient">Intelligent Systems</span>
-          </h1>
+<section class="section on-white" id="contact">
+  <div class="wrap contact">
+    <div class="rv">
+      <p class="label">Contact</p>
+      <h2>Tell me what you're working on.</h2>
+      <p class="lead">A short message is enough: what the data is, and what you want to know from it. I usually reply the same day.</p>
+      <ul class="channels">
+        <li><a href="https://wa.me/233595586430" target="_blank" rel="noopener"><span class="ic"><svg class="icon solid" aria-hidden="true"><use href="#i-b-whatsapp"/></svg></span><span><small>WhatsApp · fastest</small><strong>+233 59 558 6430</strong></span></a></li>
+        <li><a href="mailto:amadukamal8@gmail.com"><span class="ic"><svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg></span><span><small>Email</small><strong>amadukamal8@gmail.com</strong></span></a></li>
+        <li><a href="https://www.linkedin.com/in/amadu-kamal-65ab5326a" target="_blank" rel="noopener me"><span class="ic"><svg class="icon solid" aria-hidden="true"><use href="#i-b-linkedin"/></svg></span><span><small>LinkedIn</small><strong>Amadu Kamal</strong></span></a></li>
+        <li><a href="https://github.com/kamaldeenjnr" target="_blank" rel="noopener me"><span class="ic"><svg class="icon solid" aria-hidden="true"><use href="#i-b-github"/></svg></span><span><small>GitHub</small><strong>kamaldeenjnr</strong></span></a></li>
+      </ul>
+    </div>
+    <form class="form rv" data-mail="amadukamal8@gmail.com" novalidate>
+      <h3 style="margin-bottom:1rem">Send a message</h3>
+      <div class="form-grid">
+        <div class="field"><label for="f-name">Your name</label><input id="f-name" type="text" name="name" autocomplete="name" required><p class="err">Please add your name.</p></div>
+        <div class="field"><label for="f-email">Email</label><input id="f-email" name="email" type="email" autocomplete="email" required><p class="err">Please add a valid email.</p></div>
+        <div class="field full"><label for="f-topic">What is it about?</label>
+          <select id="f-topic" name="topic"><option>Data analysis or modelling</option><option>Maps and geospatial analysis</option><option>Dashboard or web platform</option><option>QuantAI</option><option>Something else</option></select></div>
+        <div class="field full"><label for="f-msg">Message</label><textarea id="f-msg" name="message" required></textarea><p class="err">Please write a short message.</p></div>
+      </div>
+      <button class="btn btn-signal" type="submit" style="margin-top:1rem"><svg class="icon" aria-hidden="true"><use href="#i-send"/></svg>Send message</button>
+      <p class="note">This opens your email app with the message filled in.</p>
+      <p class="form-status" role="status" aria-live="polite"></p>
+    </form>
+  </div>
+</section>
 
-          <p class="text-lg md:text-xl text-gray-600 leading-relaxed max-w-xl">
-            Model Analysis Hub bridges the gap between rigorous statistical research and cutting-edge software engineering - building transformative, enterprise-grade digital solutions.
-          </p>
-
-          <div class="flex flex-wrap gap-4">
-            <a href="ai.html" class="inline-flex items-center gap-3 px-7 py-3.5 rounded-xl btn-primary text-white font-bold text-sm shadow-lg">
-              <i class="fas fa-microchip"></i> Discover QuantAI
-            </a>
-            <a href="founder.html" class="inline-flex items-center gap-3 px-7 py-3.5 rounded-xl border border-gray-300 bg-white text-gray-700 font-bold text-sm hover:border-primary hover:text-primary hover:-translate-y-0.5 transition-all">
-              <i class="fas fa-user-tie"></i> Meet the Founder
-            </a>
-          </div>
-
-          <!-- Contact quick links -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-            <div class="p-4 bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200 shadow-sm">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-primary">
-                  <i class="fas fa-envelope"></i>
-                </div>
-                <div>
-                  <p class="text-xs text-gray-400 font-semibold">Email</p>
-                  <a href="mailto:amadukamal8@gmail.com" class="font-bold text-sm text-primary hover:underline">amadukamal8@gmail.com</a>
-                </div>
-              </div>
-            </div>
-            <div class="p-4 bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200 shadow-sm">
-              <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center text-green-600">
-                  <i class="fab fa-whatsapp"></i>
-                </div>
-                <div>
-                  <p class="text-xs text-gray-400 font-semibold">WhatsApp</p>
-                  <a href="https://wa.me/233595586430" target="_blank" class="font-bold text-sm text-primary hover:underline">+233 595 586 430</a>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right: Decorative dashboard widget -->
-        <div class="relative flex justify-center items-center animate-float">
-          <div class="relative w-full max-w-md">
-            <!-- Glows -->
-            <div class="absolute -top-8 -right-8 w-40 h-40 rounded-full bg-gradient-to-br from-blue-400/25 to-purple-400/25 blur-2xl"></div>
-            <div class="absolute -bottom-8 -left-8 w-48 h-48 rounded-full bg-gradient-to-tr from-cyan-400/25 to-pink-400/25 blur-2xl"></div>
-
-            <div class="relative bg-white/92 backdrop-blur-xl rounded-3xl shadow-2xl border border-gray-200 p-7 z-10">
-              <div class="flex justify-between items-center mb-6">
-                <div>
-                  <p class="text-xs text-gray-400 font-semibold uppercase tracking-wide">Operational Intelligence</p>
-                  <h3 class="font-bold text-lg text-gray-900">Model Performance</h3>
-                </div>
-                <span class="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 text-white text-xs font-bold">
-                  <span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse-slow"></span> Live
-                </span>
-              </div>
-
-              <!-- Chart mockup -->
-              <div class="bg-gray-50 rounded-xl p-4 border border-gray-100 mb-5">
-                <div class="flex justify-between text-xs text-gray-400 mb-3">
-                  <span>Predictive Accuracy</span>
-                  <span class="font-bold text-green-600">98.4%</span>
-                </div>
-                <div class="bar-chart">
-                  <div class="bar" style="height:45%; animation-delay:0.1s"></div>
-                  <div class="bar" style="height:75%; animation-delay:0.2s"></div>
-                  <div class="bar" style="height:55%; animation-delay:0.3s"></div>
-                  <div class="bar" style="height:90%; animation-delay:0.4s"></div>
-                  <div class="bar" style="height:65%; animation-delay:0.5s"></div>
-                  <div class="bar" style="height:80%; animation-delay:0.6s"></div>
-                  <div class="bar" style="height:70%; animation-delay:0.7s"></div>
-                </div>
-              </div>
-
-              <div class="grid grid-cols-3 gap-3">
-                <div class="bg-blue-50 rounded-xl p-3 text-center">
-                  <p class="text-lg font-black text-primary">5+</p>
-                  <p class="text-xs text-gray-500 font-medium mt-0.5">Projects</p>
-                </div>
-                <div class="bg-purple-50 rounded-xl p-3 text-center">
-                  <p class="text-lg font-black text-secondary">100%</p>
-                  <p class="text-xs text-gray-500 font-medium mt-0.5">Committed</p>
-                </div>
-                <div class="bg-green-50 rounded-xl p-3 text-center">
-                  <p class="text-lg font-black text-green-600">24/7</p>
-                  <p class="text-xs text-gray-500 font-medium mt-0.5">Available</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <a class="brand" href="index.html"><img src="assets/img/logo-mark.webp" alt="" width="40" height="40" loading="lazy"><span><b>Model Analysis Hub</b><small>by Amadu Kamal</small></span></a>
+        <p style="margin-top:1rem;max-width:36ch">Statistical models, maps and web tools, built in Ghana by Amadu Kamal.</p>
+      </div>
+      <div>
+        <h2>Pages</h2>
+        <ul><li><a href="projects.html">Work</a></li><li><a href="ai.html">QuantAI</a></li><li><a href="founder.html">About Amadu Kamal</a></li><li><a href="index.html#contact">Contact</a></li></ul>
+      </div>
+      <div>
+        <h2>Elsewhere</h2>
+        <ul><li><a href="mailto:amadukamal8@gmail.com">amadukamal8@gmail.com</a></li><li><a href="https://wa.me/233595586430" target="_blank" rel="noopener">WhatsApp +233 59 558 6430</a></li><li><a href="https://www.linkedin.com/in/amadu-kamal-65ab5326a" target="_blank" rel="noopener me">LinkedIn</a></li><li><a href="https://github.com/kamaldeenjnr" target="_blank" rel="noopener me">GitHub (kamaldeenjnr)</a></li></ul>
       </div>
     </div>
-  </section>
-
-  <!-- ── STATS STRIP ─────────────────────────────────────────────────── -->
-  <section class="py-10 px-4 sm:px-6 border-y border-gray-200 bg-white/60 backdrop-blur-sm">
-    <div class="max-w-7xl mx-auto">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
-        <div class="stat-card">
-          <p class="text-3xl font-black text-gradient mb-1">5+</p>
-          <p class="text-sm text-gray-500 font-medium">Completed Projects</p>
-        </div>
-        <div class="stat-card">
-          <p class="text-3xl font-black text-gradient mb-1">3+</p>
-          <p class="text-sm text-gray-500 font-medium">Technical Domains</p>
-        </div>
-        <div class="stat-card">
-          <p class="text-3xl font-black text-gradient mb-1">98%</p>
-          <p class="text-sm text-gray-500 font-medium">Model Accuracy</p>
-        </div>
-        <div class="stat-card">
-          <p class="text-3xl font-black text-gradient mb-1">1</p>
-          <p class="text-sm text-gray-500 font-medium">Visionary Founder</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── SOLUTIONS ───────────────────────────────────────────────────── -->
-  <section id="solutions" class="section-padding">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6">
-      <div class="text-center max-w-3xl mx-auto mb-14">
-        <div class="label-pill mb-4 mx-auto w-max">Core Expertise</div>
-        <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4">Engineering Data Solutions</h2>
-        <p class="text-lg text-gray-600">Fusing deep academic research with enterprise-grade development to create computational tools that work.</p>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <article class="glass-card p-8">
-          <div class="w-14 h-14 rounded-2xl mb-6 flex items-center justify-center text-2xl" style="background:linear-gradient(135deg,#dbeafe,#ede9fe)">
-            <i class="fas fa-brain text-indigo-600"></i>
-          </div>
-          <h4 class="font-bold text-xl text-gray-900 mb-3">Predictive Modeling</h4>
-          <p class="text-gray-600 text-sm leading-relaxed">Building robust statistical forecasting models that translate complex data into clear, actionable intelligence for real-world decisions.</p>
-        </article>
-
-        <article class="glass-card p-8">
-          <div class="w-14 h-14 rounded-2xl mb-6 flex items-center justify-center text-2xl" style="background:linear-gradient(135deg,#d1fae5,#cffafe)">
-            <i class="fas fa-layer-group text-emerald-600"></i>
-          </div>
-          <h4 class="font-bold text-xl text-gray-900 mb-3">Full-Stack Development</h4>
-          <p class="text-gray-600 text-sm leading-relaxed">Architecting high-performance web applications and dashboards - from backend infrastructure to polished, responsive front-end interfaces.</p>
-        </article>
-
-        <article class="glass-card p-8">
-          <div class="w-14 h-14 rounded-2xl mb-6 flex items-center justify-center text-2xl" style="background:linear-gradient(135deg,#fce7f3,#fef3c7)">
-            <i class="fas fa-chart-line text-pink-600"></i>
-          </div>
-          <h4 class="font-bold text-xl text-gray-900 mb-3">Data Analytics</h4>
-          <p class="text-gray-600 text-sm leading-relaxed">Comprehensive statistical analysis, geospatial modeling, and interactive visualisation - turning raw numbers into strategic narrative.</p>
-        </article>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── FEATURED PROJECTS ───────────────────────────────────────────── -->
-  <section class="section-padding px-4 sm:px-6 border-t border-gray-200 bg-white/40 backdrop-blur-sm">
-    <div class="max-w-7xl mx-auto">
-      <div class="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
-        <div>
-          <div class="label-pill mb-3">Proven Track Record</div>
-          <h2 class="text-3xl md:text-4xl font-bold text-gray-900">Featured Projects</h2>
-        </div>
-        <a href="projects.html" class="btn-primary px-6 py-3 rounded-xl text-white font-bold text-sm flex items-center gap-2 shadow-md">
-          View All <i class="fas fa-arrow-right"></i>
-        </a>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-
-        <!-- Project 1 -->
-        <a href="projects.html" class="proj-card-hero block" style="height: 320px;">
-          <div class="w-full h-full overflow-hidden">
-            <img src="images/ghana_malaria_better_colors.png" alt="Malaria Risk Prediction Model">
-          </div>
-          <div class="proj-overlay">
-            <span class="inline-block px-3 py-1 bg-primary text-white text-xs font-bold rounded-full mb-3 w-max">Spatial Analytics</span>
-            <h3 class="text-2xl font-bold text-white mb-1">Malaria Risk Prediction</h3>
-            <p class="text-gray-300 text-sm">Geospatial pipeline forecasting disease risk across Ghana using climate and population data.</p>
-          </div>
-        </a>
-
-        <!-- Project 2 -->
-        <a href="projects.html" class="proj-card-hero block" style="height: 320px;">
-          <div class="w-full h-full overflow-hidden">
-            <img src="images/dashboooard.png" alt="Enterprise Analytics Dashboard">
-          </div>
-          <div class="proj-overlay">
-            <span class="inline-block px-3 py-1 bg-secondary text-white text-xs font-bold rounded-full mb-3 w-max">Web Dashboard</span>
-            <h3 class="text-2xl font-bold text-white mb-1">Enterprise Analytics Portal</h3>
-            <p class="text-gray-300 text-sm">Full-stack BI dashboard engineered for real-time data stream interpretation and KPI tracking.</p>
-          </div>
-        </a>
-
-      </div>
-    </div>
-  </section>
-
-  <!-- ── QUANTAI TEASER ─────────────────────────────────────────────── -->
-  <section class="section-padding px-4 sm:px-6">
-    <div class="max-w-7xl mx-auto">
-      <div class="relative overflow-hidden rounded-3xl p-10 md:p-16 text-white" style="background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #312e81 100%)">
-        <!-- Decorative blobs -->
-        <div class="absolute top-0 right-0 w-80 h-80 rounded-full opacity-10 blur-3xl" style="background: radial-gradient(circle, #60a5fa, transparent 70%)"></div>
-        <div class="absolute bottom-0 left-0 w-80 h-80 rounded-full opacity-10 blur-3xl" style="background: radial-gradient(circle, #a78bfa, transparent 70%)"></div>
-
-        <div class="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
-          <div class="space-y-6">
-            <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-indigo-500/30 bg-indigo-500/10 text-blue-200 text-xs font-semibold tracking-wide">
-              <span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span> Launching Soon
-            </div>
-            <h2 class="text-4xl md:text-5xl font-display font-black leading-tight">
-              Meet <span style="background:linear-gradient(90deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">QuantAI</span>
-            </h2>
-            <p class="text-blue-100 text-lg leading-relaxed">
-              A high-performance computational intelligence engine being engineered to process complex datasets, execute Bayesian models, and deliver enterprise-grade analytical power.
-            </p>
-            <a href="ai.html" class="inline-flex items-center gap-3 px-7 py-3.5 rounded-xl font-bold text-sm text-white transition-all hover:-translate-y-0.5 hover:shadow-xl" style="background: linear-gradient(135deg,#2563eb,#7c3aed); box-shadow: 0 8px 24px rgba(37,99,235,0.4)">
-              <i class="fas fa-microchip"></i> Explore QuantAI
-            </a>
-          </div>
-          <div class="bg-white/5 border border-white/10 rounded-2xl p-6 font-mono text-sm text-gray-300">
-            <div class="flex gap-2 mb-4 pb-4 border-b border-white/10">
-              <div class="w-3 h-3 rounded-full bg-red-400/70"></div>
-              <div class="w-3 h-3 rounded-full bg-yellow-400/70"></div>
-              <div class="w-3 h-3 rounded-full bg-green-400/70"></div>
-            </div>
-<pre class="text-xs sm:text-sm overflow-x-auto">
-<span class="text-blue-400">import</span> quantai
-
-engine = quantai.connect(
-  env=<span class="text-green-400">"production"</span>
-)
-
-result = engine.simulate(
-  dataset=<span class="text-green-400">"global_health_q3"</span>,
-  algorithm=<span class="text-green-400">"bayesian_network"</span>,
-  confidence=<span class="text-purple-400">0.99</span>
-)
-
-<span class="text-blue-400">print</span>(result.insights)
-<span class="text-gray-500"># → High-confidence predictions ready</span></pre>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── CONTACT SECTION ────────────────────────────────────────────── -->
-  <section id="contact" class="section-padding px-4 sm:px-6 border-t border-gray-200">
-    <div class="max-w-6xl mx-auto">
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
-
-        <!-- Left: Info -->
-        <div class="space-y-8">
-          <div>
-            <div class="label-pill mb-4">Get In Touch</div>
-            <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4 leading-tight">
-              Let's Build Something <span class="text-gradient">Remarkable.</span>
-            </h2>
-            <p class="text-lg text-gray-600 leading-relaxed">
-              Whether you need a data analytics solution, a high-performance web platform, or a consultation on predictive modeling - reach out directly. Response is typically within a few hours.
-            </p>
-          </div>
-
-          <div class="space-y-4">
-            <a href="mailto:amadukamal8@gmail.com" class="flex items-center gap-4 p-5 glass-card group hover:border-primary/30">
-              <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg flex-shrink-0 group-hover:scale-110 transition-transform" style="background:linear-gradient(135deg,#dbeafe,#ede9fe)">
-                <i class="fas fa-envelope text-indigo-600"></i>
-              </div>
-              <div>
-                <p class="text-xs text-gray-400 font-semibold uppercase tracking-wide">Email</p>
-                <p class="font-bold text-gray-900 group-hover:text-primary transition-colors">amadukamal8@gmail.com</p>
-              </div>
-              <i class="fas fa-arrow-right ml-auto text-gray-300 group-hover:text-primary group-hover:translate-x-1 transition-all"></i>
-            </a>
-
-            <a href="https://wa.me/233595586430" target="_blank" class="flex items-center gap-4 p-5 glass-card group hover:border-green-300">
-              <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg flex-shrink-0 group-hover:scale-110 transition-transform" style="background:linear-gradient(135deg,#d1fae5,#a7f3d0)">
-                <i class="fab fa-whatsapp text-green-600"></i>
-              </div>
-              <div>
-                <p class="text-xs text-gray-400 font-semibold uppercase tracking-wide">WhatsApp</p>
-                <p class="font-bold text-gray-900 group-hover:text-green-600 transition-colors">+233 595 586 430</p>
-              </div>
-              <i class="fas fa-arrow-right ml-auto text-gray-300 group-hover:text-green-500 group-hover:translate-x-1 transition-all"></i>
-            </a>
-
-            <a href="https://linkedin.com/in/amadu-kamal-65ab5326a" target="_blank" class="flex items-center gap-4 p-5 glass-card group hover:border-blue-300">
-              <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg flex-shrink-0 group-hover:scale-110 transition-transform" style="background:linear-gradient(135deg,#dbeafe,#bfdbfe)">
-                <i class="fab fa-linkedin-in text-blue-700"></i>
-              </div>
-              <div>
-                <p class="text-xs text-gray-400 font-semibold uppercase tracking-wide">LinkedIn</p>
-                <p class="font-bold text-gray-900 group-hover:text-blue-700 transition-colors">Amadu Kamal</p>
-              </div>
-              <i class="fas fa-arrow-right ml-auto text-gray-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all"></i>
-            </a>
-
-            <a href="https://github.com/kamaldeenjnr" target="_blank" class="flex items-center gap-4 p-5 glass-card group hover:border-gray-400">
-              <div class="w-12 h-12 rounded-xl flex items-center justify-center text-lg flex-shrink-0 group-hover:scale-110 transition-transform" style="background:linear-gradient(135deg,#f1f5f9,#e2e8f0)">
-                <i class="fab fa-github text-gray-800"></i>
-              </div>
-              <div>
-                <p class="text-xs text-gray-400 font-semibold uppercase tracking-wide">GitHub</p>
-                <p class="font-bold text-gray-900 group-hover:text-gray-700 transition-colors">kamaldeenjnr</p>
-              </div>
-              <i class="fas fa-arrow-right ml-auto text-gray-300 group-hover:text-gray-500 group-hover:translate-x-1 transition-all"></i>
-            </a>
-          </div>
-        </div>
-
-        <!-- Right: Contact Form -->
-        <div class="glass-card p-8 md:p-10">
-          <h3 class="text-2xl font-bold text-gray-900 mb-2">Send a Message</h3>
-          <p class="text-sm text-gray-500 mb-8">Fill out the form and it goes straight to Amadu's inbox.</p>
-
-          <form id="contact-form" action="mailto:amadukamal8@gmail.com" method="post" enctype="text/plain" class="space-y-5">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div>
-                <label class="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2" for="cf-name">Full Name</label>
-                <input id="cf-name" name="Name" type="text" required placeholder="Your name"
-                  class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white/80 text-gray-900 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder-gray-400">
-              </div>
-              <div>
-                <label class="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2" for="cf-email">Email Address</label>
-                <input id="cf-email" name="Email" type="email" required placeholder="your@email.com"
-                  class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white/80 text-gray-900 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder-gray-400">
-              </div>
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2" for="cf-subject">Subject</label>
-              <select id="cf-subject" name="Subject"
-                class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white/80 text-gray-900 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all">
-                <option value="Data Analytics Project">Data Analytics Project</option>
-                <option value="Web Development">Web Development</option>
-                <option value="Predictive Modeling">Predictive Modeling</option>
-                <option value="Geospatial Analysis">Geospatial Analysis</option>
-                <option value="Collaboration">Collaboration</option>
-                <option value="General Inquiry">General Inquiry</option>
-              </select>
-            </div>
-
-            <div>
-              <label class="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2" for="cf-message">Message</label>
-              <textarea id="cf-message" name="Message" rows="5" required placeholder="Describe your project or inquiry..."
-                class="w-full px-4 py-3 rounded-xl border border-gray-200 bg-white/80 text-gray-900 text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all placeholder-gray-400 resize-none"></textarea>
-            </div>
-
-            <button type="submit" class="w-full py-4 rounded-xl btn-primary text-white font-bold text-sm flex items-center justify-center gap-3 shadow-lg hover:shadow-xl transition-all">
-              <i class="fas fa-paper-plane"></i> Send Message
-            </button>
-
-            <p class="text-xs text-gray-400 text-center">Or reach out directly via WhatsApp for a faster response.</p>
-          </form>
-        </div>
-
-      </div>
-    </div>
-  </section>
-
-  <!-- ── FOOTER ─────────────────────────────────────────────────────── -->
-  <footer class="bg-gradient-to-br from-dark to-gray-900 text-white py-14 px-4 sm:px-6">
-    <div class="max-w-7xl mx-auto">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-10 pb-10 border-b border-gray-800 mb-8">
-
-        <!-- Brand -->
-        <div class="space-y-4">
-          <div class="flex items-center gap-3">
-            <div class="w-12 h-12 rounded-xl overflow-hidden bg-white/10">
-              <img src="images/modellogo.jpg" alt="Logo" class="w-full h-full object-contain">
-            </div>
-            <div>
-              <h3 class="font-bold text-lg">Model Analysis Hub</h3>
-              <p class="text-xs text-blue-300">Founded by Amadu Kamal</p>
-            </div>
-          </div>
-          <p class="text-gray-400 text-sm leading-relaxed">
-            Engineering intelligent data systems at the intersection of mathematics and software.
-          </p>
-        </div>
-
-        <!-- Links -->
-        <div>
-          <h4 class="font-bold text-sm uppercase tracking-wider text-gray-400 mb-4">Navigation</h4>
-          <ul class="space-y-2 text-sm text-gray-300">
-            <li><a href="index.html" class="hover:text-white transition-colors">Home</a></li>
-            <li><a href="projects.html" class="hover:text-white transition-colors">Projects Gallery</a></li>
-            <li><a href="ai.html" class="hover:text-white transition-colors">QuantAI Platform</a></li>
-            <li><a href="founder.html" class="hover:text-white transition-colors">Founder Profile</a></li>
-          </ul>
-        </div>
-
-        <!-- Contact -->
-        <div>
-          <h4 class="font-bold text-sm uppercase tracking-wider text-gray-400 mb-4">Contact</h4>
-          <ul class="space-y-3 text-sm">
-            <li>
-              <a href="mailto:amadukamal8@gmail.com" class="flex items-center gap-3 text-gray-300 hover:text-white transition-colors">
-                <i class="fas fa-envelope text-blue-400 w-4"></i> amadukamal8@gmail.com
-              </a>
-            </li>
-            <li>
-              <a href="https://wa.me/233595586430" target="_blank" class="flex items-center gap-3 text-gray-300 hover:text-white transition-colors">
-                <i class="fab fa-whatsapp text-green-400 w-4"></i> +233 595 586 430
-              </a>
-            </li>
-            <li>
-              <a href="https://linkedin.com/in/amadu-kamal-65ab5326a" target="_blank" class="flex items-center gap-3 text-gray-300 hover:text-white transition-colors">
-                <i class="fab fa-linkedin-in text-blue-400 w-4"></i> LinkedIn
-              </a>
-            </li>
-            <li>
-              <a href="https://github.com/kamaldeenjnr" target="_blank" class="flex items-center gap-3 text-gray-300 hover:text-white transition-colors">
-                <i class="fab fa-github text-gray-400 w-4"></i> GitHub
-              </a>
-            </li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-gray-500">
-        <p>&copy; 2025 Model Analysis Hub. All rights reserved.</p>
-        <div class="flex gap-4">
-          <a href="https://linkedin.com/in/amadu-kamal-65ab5326a" target="_blank" class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-blue-600 transition-colors"><i class="fab fa-linkedin-in text-xs"></i></a>
-          <a href="https://github.com/kamaldeenjnr" target="_blank" class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-gray-600 transition-colors"><i class="fab fa-github text-xs"></i></a>
-          <a href="https://wa.me/233595586430" target="_blank" class="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center hover:bg-green-500 transition-colors"><i class="fab fa-whatsapp text-xs"></i></a>
-        </div>
-      </div>
-    </div>
-  </footer>
-
-  <!-- QuantAI Chatbot -->
-  <script src="scroll-animations.js"></script>
-  <script src="quantai.js"></script>
+    <div class="foot-bottom"><span>&copy; <span data-year>2026</span> Model Analysis Hub · Amadu Kamal</span><span>Made in Ghana</span></div>
+  </div>
+</footer>
+<script src="assets/js/site.js" defer></script>
+<script src="assets/js/assistant.js" defer></script>
 </body>
 </html>
-

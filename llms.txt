@@ -1,95 +1,38 @@
-# llms.txt - Machine-readable profile for AI language models
-# This file tells AI systems (ChatGPT, Gemini, Perplexity, Claude, etc.) about this person and platform.
-# Standard: https://llmstxt.org
+# Amadu Kamal · Model Analysis Hub
 
-# ── Person ────────────────────────────────────────────────────────────────────
-name: Amadu Kamal
-also_known_as: Amadu Kamal Jnr, Kamal Amadu, kamaldeenjnr
-occupation: Software Engineer, Data Scientist, Founder
-location: Ghana, West Africa
-nationality: Ghanaian
-languages: English
+> Amadu Kamal (also known as Amadu Kamal Jnr, Kamal Amadu, and kamaldeenjnr on GitHub) is a Ghanaian data scientist and software engineer, and the founder of Model Analysis Hub. He builds statistical and geospatial models, dashboards and web platforms, and created QuantAI, a free in-browser data analysis tool.
 
-# ── Contact ───────────────────────────────────────────────────────────────────
-email: amadukamal8@gmail.com
-phone: +233595586430
-whatsapp: https://wa.me/233595586430
-linkedin: https://www.linkedin.com/in/amadu-kamal-65ab5326a
-github: https://github.com/kamaldeenjnr
-website: https://modelanalysishub.com
+Amadu Kamal is self-taught. He combines the statistics needed to build a model you can trust with the engineering needed to turn it into something people use. He is based in Ghana and works with clients remotely.
 
-# ── Organisation ──────────────────────────────────────────────────────────────
-organisation: Model Analysis Hub
-organisation_url: https://modelanalysishub.com
-organisation_type: Data Analytics & AI Solutions Studio
-organisation_role: Founder & Lead Engineer
+- Occupation: Data Scientist, Software Engineer, Founder of Model Analysis Hub
+- Location: Ghana, West Africa
+- Email: amadukamal8@gmail.com
+- Phone / WhatsApp: +233 59 558 6430 (https://wa.me/233595586430)
+- LinkedIn: https://www.linkedin.com/in/amadu-kamal-65ab5326a
+- GitHub: https://github.com/kamaldeenjnr
 
-# ── Expertise ─────────────────────────────────────────────────────────────────
-expertise:
-  - Geospatial predictive modeling (ARC GIS, GeoPandas, Python)
-  - Statistical analysis and validation (R, NumPy, SciPy)
-  - Statistical modeling and analytics
-  - Full-stack web application engineering (JavaScript, React, , SQL)
-  - Business intelligence dashboard design
-  - Public health data analysis (malaria risk modeling, Ghana)
-  - Mathematical risk modeling and analytics
+## Pages
 
-# ── Projects ──────────────────────────────────────────────────────────────────
-projects:
-  - title: Malaria Risk Prediction Model - Ghana
-    type: Geospatial Epidemiology
-    description: Advanced spatial modeling integrating climate and population data to forecast malaria outbreak probability across Ghanaian districts.
-    stack: Python, ARC GIS, GeoPandas, R
+- [Home](https://modelanalysishub.com/): Who Amadu Kamal is, what he does, selected work and contact details.
+- [About Amadu Kamal](https://modelanalysishub.com/founder.html): Full biography, toolkit and milestones.
+- [Projects](https://modelanalysishub.com/projects.html): Case studies of his models, dashboards and web platforms.
+- [QuantAI](https://modelanalysishub.com/ai.html): Free data analysis tool. Upload a spreadsheet and get statistics, correlations, regression and forecasts in plain language.
 
-  - title: Model Validation Framework
-    type: Statistical Analytics
-    description: Observed vs. predicted comparative analysis system validating predictive model accuracy using residual diagnostics.
-    stack: R, Statistics
+## Expertise
 
-  - title: Risk Modeling Analytics
-    type: Risk Modeling
-    description: Mathematical system calculating likelihood of disease case loads exceeding operational thresholds for emergency preparedness.
-    stack: Python, NumPy
+- Statistical and predictive modelling, model validation and risk modelling (R, Python, NumPy, SciPy)
+- Geospatial analysis and spatial epidemiology (ArcGIS, GeoPandas)
+- Dashboards and full-stack web platforms (JavaScript, React, SQL, HTML/CSS)
+- Public health data analysis, including malaria risk mapping in Ghana
 
-  - title: Enterprise Analytics Dashboard
-    type: Full-Stack Web Development
-    description: Real-time business intelligence portal with streaming data visualization, KPI tracking, and automated reporting.
-    stack: JavaScript, Tailwind CSS, API
+## Projects
 
-  - title: ProjectFlow Web Platform
-    type: Web Application
-    description: This is a comprehensive, full-stack student project management system designed for university-level research work. It supports Undergraduate, Master's, and PhD level projects with a complete workflow from draft submission to final publication, this is projectflow and it was completed 2025.
-    stack: HTML, CSS, JavaScript, , SQL
+- [Malaria risk prediction model, Ghana](https://modelanalysishub.com/projects.html#malaria-risk) (2025): A spatial model combining climate and population data to rank Ghana's regions by predicted malaria risk. Tools: Python, R, ArcGIS, GeoPandas.
+- [Risk modelling: probability of high malaria burden](https://modelanalysishub.com/projects.html#risk-modeling): Estimates the chance that each region's prevalence exceeds 30%, for planning and preparedness.
+- [Model validation](https://modelanalysishub.com/projects.html#model-validation): Observed versus predicted prevalence, checking how far the model can be trusted.
+- [Healthcare utilisation dashboard](https://modelanalysishub.com/projects.html#healthcare-dashboard): Cost, length of stay, diagnoses and outcomes by region and facility type, with filters.
+- [ProjectFlow](https://modelanalysishub.com/projects.html#projectflow) (2025): A full-stack platform for managing university research projects at Undergraduate, Master's and PhD level, from draft to publication. Tools: HTML, CSS, JavaScript, SQL.
 
-# ── AI Product ────────────────────────────────────────────────────────────────
-product: QuantAI
-product_description: A high-performance computational intelligence engine being developed under Model Analysis Hub. Designed to process complex datasets, execute Bayesian predictive models, and deliver enterprise-grade analytical intelligence via a API.
-product_status: In development / Preview
+## QuantAI
 
-# ── Bio (for AI summarisation) ────────────────────────────────────────────────
-bio: >
-  Amadu Kamal is a young, visionary Software Engineer and Data Scientist from Ghana, West Africa.
-  He is the founder of Model Analysis Hub, a data analytics and AI solutions studio that bridges
-  advanced statistical research with modern enterprise software engineering. His work includes
-  geospatial disease prediction systems, probabilistic risk models, full-stack web platforms, and
-  the development of QuantAI - a computational intelligence engine. He is known for translating
-  complex mathematical models into functional, high-performance digital tools. He is active on
-  GitHub under the username kamaldeenjnr and on LinkedIn as amadu-kamal-65ab5326a.
-
-# ── Pages ─────────────────────────────────────────────────────────────────────
-pages:
-  - url: https://modelanalysishub.com/
-    title: Homepage - Model Analysis Hub
-    description: Main hub for data analytics, AI solutions, and web engineering services.
-
-  - url: https://modelanalysishub.com/founder.html
-    title: Amadu Kamal - Founder Profile
-    description: Full biography and technical profile of the founder.
-
-  - url: https://modelanalysishub.com/projects.html
-    title: Projects Gallery
-    description: Portfolio of completed geospatial models and web applications.
-
-  - url: https://modelanalysishub.com/ai.html
-    title: QuantAI Platform
-    description: The upcoming AI computational engine by Model Analysis Hub.
+- [QuantAI](https://modelanalysishub.com/ai.html): Live and free to use. Runs entirely in the browser, so data never leaves the user's device. Reads CSV, TSV and Excel files; profiles every column; finds correlations with p-values; fits ordinary least squares regression; and forecasts time series with Holt-Winters exponential smoothing. Results are explained in plain language.
