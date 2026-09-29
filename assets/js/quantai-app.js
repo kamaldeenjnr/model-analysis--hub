@@ -129,6 +129,12 @@
     renderOverview(); renderColumns(); renderRelations(); setupRegression(); setupForecast(); renderTable();
     selectTab('overview');
     results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.dispatchEvent(new CustomEvent('quantai:loaded', { detail: { state: state, goTo: goTo } }));
+  }
+  function goTo(tab) {
+    selectTab(tab);
+    if (tab === 'regression') runRegression(); if (tab === 'forecast') runForecast();
+    $('#qa-tabs').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   /* tabs */

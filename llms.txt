@@ -1,10 +1,10 @@
 # Amadu Kamal · Model Analysis Hub
 
-> Amadu Kamal (also known as Amadu Kamal Jnr, Kamal Amadu, and kamaldeenjnr on GitHub) is a Ghanaian data scientist and software engineer, and the founder of Model Analysis Hub. He builds websites, statistical and geospatial models, and dashboards, and created QuantAI, a free in-browser data analysis tool.
+> Amadu Kamal (also known as Amadu Kamal Jnr, Kamal Amadu, and kamaldeenjnr on GitHub) is a Ghanaian data analyst and software engineer, and the founder of Model Analysis Hub. He builds websites, statistical and geospatial models, and dashboards, and created QuantAI, a free in-browser data analysis tool.
 
-Amadu Kamal is self-taught. He combines the statistics needed to build a model you can trust with the engineering needed to turn it into something people use. He is based in Ghana and works with clients remotely.
+Amadu Kamal built his skills through mentors and real projects. He combines the statistics needed to build a model you can trust with the engineering needed to turn it into something people use. He is based in Ghana and works with clients remotely.
 
-- Occupation: Data Scientist, Software Engineer, Founder of Model Analysis Hub
+- Occupation: Data Analyst, Software Engineer, Founder of Model Analysis Hub
 - Location: Ghana, West Africa
 - Email: amadukamal8@gmail.com
 - Phone / WhatsApp: +233 59 558 6430 (https://wa.me/233595586430)
@@ -16,7 +16,7 @@ Amadu Kamal is self-taught. He combines the statistics needed to build a model y
 - [Home](https://modelanalysishub.com/): Who Amadu Kamal is, what he does, selected work and contact details.
 - [About Amadu Kamal](https://modelanalysishub.com/founder.html): Full biography, toolkit and milestones.
 - [Projects](https://modelanalysishub.com/projects.html): Case studies of his models, dashboards and web platforms.
-- [QuantAI](https://modelanalysishub.com/ai.html): Free data analysis tool. Upload a spreadsheet and get statistics, correlations, regression and forecasts in plain language.
+- [QuantAI](https://modelanalysishub.com/ai.html): Free data analysis tool. Upload a spreadsheet, ask questions about it, and get statistics, correlations, regression and forecasts in plain language.
 
 ## Expertise
 
@@ -37,4 +37,4 @@ Amadu Kamal is self-taught. He combines the statistics needed to build a model y
 
 ## QuantAI
 
-- [QuantAI](https://modelanalysishub.com/ai.html): Live and free to use. Runs entirely in the browser, so data never leaves the user's device. Reads CSV, TSV and Excel files; profiles every column; finds correlations with p-values; fits ordinary least squares regression; and forecasts time series with Holt-Winters exponential smoothing. Results are explained in plain language.
+- [QuantAI](https://modelanalysishub.com/ai.html): Live and free to use. The statistics run in the browser, so the file itself is never uploaded; users can also type questions about their data and get answers in plain language. Reads CSV, TSV and Excel files; profiles every column; finds correlations with p-values; fits ordinary least squares regression; and forecasts time series with Holt-Winters exponential smoothing. Results are explained in plain language.

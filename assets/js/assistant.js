@@ -8,7 +8,7 @@
 
   var KB = [
     { id: 'about', words: 'who amadu kamal founder about you yourself person owner behind background story bio',
-      a: 'Amadu Kamal is a data scientist and software engineer from Ghana, and the founder of Model Analysis Hub. He builds statistical models, maps and web tools, and taught himself most of it over the past five years through projects, mentors and a lot of practice. <a href="founder.html">Read his story</a>.' },
+      a: 'Amadu Kamal is a data analyst and software engineer from Ghana, and the founder of Model Analysis Hub. He builds statistical models, risk maps, dashboards and websites, and created the free QuantAI data tool. <a href="founder.html">More about Amadu</a>.' },
     { id: 'contact', words: 'contact reach email mail phone number call whatsapp talk message hire book meeting',
       a: 'The quickest way is WhatsApp: <a href="' + WA + '" target="_blank" rel="noopener">+233 59 558 6430</a>. You can also email <a href="mailto:' + MAIL + '">' + MAIL + '</a> or use the <a href="index.html#contact">contact form</a>.' },
     { id: 'services', words: 'service services offer do help build work with can you make need project job freelance consult consulting',
@@ -24,15 +24,15 @@
     { id: 'projectflow', words: 'projectflow project flow university student thesis research management platform phd masters undergraduate',
       a: 'ProjectFlow is a full-stack platform for managing university research projects at Undergraduate, Master\'s and PhD level, from first draft to final publication. It was completed in 2025. <a href="projects.html#projectflow">Details</a>.' },
     { id: 'quantai', words: 'quantai quant ai tool analyse analyze upload spreadsheet csv excel data statistics forecast regression correlation',
-      a: '<b>QuantAI</b> is a free data tool on this site. Upload a CSV or Excel file and it gives you a plain-language summary, charts, correlations, a regression and a forecast. It runs in your browser, so your file is never uploaded. <a href="ai.html">Open QuantAI</a>.' },
+      a: '<b>QuantAI</b> is a free data tool on this site. Add a CSV or Excel file, then type a question such as "What affects sales most?" in the box that appears. It answers in plain English and backs it up with charts, correlations, a regression and a forecast. Your file stays on your device. <a href="ai.html">Open QuantAI</a>.' },
     { id: 'privacy', words: 'privacy private safe secure data upload stored store server confidential',
-      a: 'QuantAI does all its work inside your browser. Your file is not sent to any server, and nothing is saved after you close the page.' },
+      a: 'QuantAI does its calculations inside your browser, so your file is never uploaded or saved. When you ask a question with AI switched on, only a summary of the numbers is sent to get the answer. You can switch AI off for built-in answers only.' },
     { id: 'skills', words: 'skills tools stack languages technologies python r javascript react sql arcgis geopandas numpy tech',
       a: 'Main tools: <b>Python</b> and <b>R</b> for statistics and modelling (NumPy, SciPy), <b>ArcGIS</b> and <b>GeoPandas</b> for maps, and <b>JavaScript</b>, <b>React</b> and <b>SQL</b> for web platforms and dashboards.' },
     { id: 'location', words: 'where location based country ghana africa city remote',
       a: 'Amadu is based in Ghana and works with clients remotely too.' },
     { id: 'education', words: 'education school university degree study studied learn learned self taught training',
-      a: 'Amadu is largely self-taught. Over the past five years he has learned from mentors, peers and hands-on projects rather than a traditional degree path. <a href="founder.html">More about his journey</a>.' },
+      a: 'Amadu built his skills over five years through courses, mentors and a long run of real projects. <a href="founder.html">Read his background</a>.' },
     { id: 'hello', words: 'hi hello hey good morning afternoon evening greetings',
       a: 'Hello! Ask me about Amadu, his projects, the QuantAI data tool, or how to get in touch.' },
     { id: 'thanks', words: 'thanks thank you great cool nice ok okay',
@@ -98,7 +98,7 @@
   var sendIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>';
   var wrap = document.createElement('div');
   wrap.innerHTML =
-    '<button class="asst-btn" type="button" aria-expanded="false" aria-controls="asst">' + chatIcon + '<span>Ask a question</span></button>' +
+    '<button class="asst-btn" type="button" aria-expanded="false" aria-controls="asst">' + chatIcon + '<span>' + (/ai\.html$/.test(location.pathname) ? 'Ask about Amadu' : 'Ask a question') + '</span></button>' +
     '<section class="asst" id="asst" role="dialog" aria-label="Questions about Amadu Kamal" hidden>' +
       '<div class="asst-h"><div style="display:flex;gap:.65rem;align-items:center"><img src="assets/img/amadu-kamal-480.webp" alt=""><div><b>Ask about Amadu</b><small>AI assistant · answers about his work</small></div></div><button class="asst-x" type="button" aria-label="Close">&times;</button></div>' +
       '<div class="asst-log" aria-live="polite"></div>' +
