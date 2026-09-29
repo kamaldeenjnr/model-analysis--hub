@@ -21,7 +21,7 @@ Amadu Kamal built his skills through mentors and real projects. He combines the 
 ## Expertise
 
 - Statistical and predictive modelling, model validation and risk modelling (R, Python, NumPy, SciPy)
-- Geospatial analysis and spatial epidemiology (ArcGIS, GeoPandas)
+- Geospatial analysis and spatial epidemiology (ArcGIS)
 - Websites for organisations, with content systems clients manage themselves
 - Dashboards and full-stack web platforms (JavaScript, React, SQL, HTML/CSS)
 - Public health data analysis, including malaria risk mapping in Ghana
@@ -29,7 +29,7 @@ Amadu Kamal built his skills through mentors and real projects. He combines the 
 ## Projects
 
 - [The Sunshine Project website](https://modelanalysishub.com/projects.html#sunshine-project) (2026, client project): A multi-page website for The Sunshine Project, a Ghanaian NGO, designed and built by Amadu Kamal. Includes an admin login so the NGO's team updates programmes, schedules and photos themselves. Live at https://sunshine-project-website.vercel.app. Tools: HTML, CSS, JavaScript, Python, Decap CMS, Vercel.
-- [Malaria risk prediction model, Ghana](https://modelanalysishub.com/projects.html#malaria-risk) (2025): A spatial model combining climate and population data to rank Ghana's regions by predicted malaria risk. Tools: Python, R, ArcGIS, GeoPandas.
+- [Malaria risk prediction model, Ghana](https://modelanalysishub.com/projects.html#malaria-risk) (2025): A spatial model combining climate and population data to rank Ghana's regions by predicted malaria risk. Tools: Python, R, ArcGIS.
 - [Risk modelling: probability of high malaria burden](https://modelanalysishub.com/projects.html#risk-modeling): Estimates the chance that each region's prevalence exceeds 30%, for planning and preparedness.
 - [Model validation](https://modelanalysishub.com/projects.html#model-validation): Observed versus predicted prevalence, checking how far the model can be trusted.
 - [Healthcare utilisation dashboard](https://modelanalysishub.com/projects.html#healthcare-dashboard): Cost, length of stay, diagnoses and outcomes by region and facility type, with filters.

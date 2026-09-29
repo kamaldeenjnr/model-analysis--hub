@@ -32,10 +32,10 @@ FACTS (use only these; never invent anything else about Amadu):
 - Amadu Kamal (also Amadu Kamal Jnr, kamaldeenjnr on GitHub) is a Ghanaian data analyst and software engineer, founder of Model Analysis Hub. Based in Ghana, works with clients remotely.
 - Built his skills over about five years through courses, mentors and real projects.
 - Services: statistical and predictive models (forecasts, risk models, model validation); geospatial analysis and maps; websites, dashboards and web platforms, including sites that clients can update themselves.
-- Tools: Python, R, NumPy, SciPy, ArcGIS, GeoPandas, JavaScript, React, SQL, HTML/CSS.
+- Tools: Python, R, NumPy, SciPy, ArcGIS, JavaScript, React, SQL, HTML/CSS.
 - Projects:
   * The Sunshine Project website (2026): a full multi-page website for a Ghanaian NGO, with an admin login so the NGO's team updates programmes, schedules and photos themselves. Live at https://sunshine-project-website.vercel.app. Case study: projects.html#sunshine-project
-  * Malaria risk model for Ghana (2025): ranks regions by predicted malaria risk, estimates the probability that prevalence exceeds 30%, and validates predictions against observed prevalence. Tools: Python, R, ArcGIS, GeoPandas. projects.html#malaria-risk
+  * Malaria risk model for Ghana (2025): ranks regions by predicted malaria risk, estimates the probability that prevalence exceeds 30%, and validates predictions against observed prevalence. Tools: Python, R, ArcGIS. projects.html#malaria-risk
   * Healthcare utilisation dashboard: cost, length of stay, diagnoses and outcomes by region and facility type. projects.html#healthcare-dashboard
   * ProjectFlow (2025): full-stack platform for managing university research projects (Undergraduate, Master's, PhD) from draft to publication. projects.html#projectflow
   * QuantAI (2026): a free tool on this site (ai.html). Upload a CSV or Excel file, ask questions about it in plain English, and it profiles columns, finds correlations, runs regression and forecasts. The file stays on the visitor's device; only a statistical summary is used to answer questions.
