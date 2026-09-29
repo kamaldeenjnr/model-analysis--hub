@@ -1,7 +1,9 @@
-/* Site assistant — answers common questions about Amadu Kamal and Model Analysis Hub.
-   Runs in the browser with a small knowledge base; no data leaves the page. */
+/* Site assistant — answers questions about Amadu Kamal and Model Analysis Hub.
+   If AI_URL is set, questions go to the AI assistant (a Cloudflare Worker that calls Groq; the key stays there).
+   If it is empty, slow or unavailable, the built-in knowledge base below answers instead. */
 (function () {
   'use strict';
+  var AI_URL = '';   // e.g. 'https://mah-assistant.YOUR-NAME.workers.dev'
   var WA = 'https://wa.me/233595586430', MAIL = 'amadukamal8@gmail.com';
 
   var KB = [
@@ -37,7 +39,8 @@
       a: 'You\'re welcome. If you want to talk about a project, WhatsApp is the fastest: <a href="' + WA + '" target="_blank" rel="noopener">message Amadu</a>.' }
   ];
 
-  function tokens(s) { return String(s).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean); }
+  var STOP = ' a an the i me my you your he his is are was do does did can could will would how what who where when why which to of in on for and or it this that with about please tell show '
+  function tokens(s) { return String(s).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(function (t) { return t && STOP.indexOf(' ' + t + ' ') < 0; }); }
   function lev(a, b) {
     if (Math.abs(a.length - b.length) > 2) return 3;
     var d = []; for (var i = 0; i <= a.length; i++) { d[i] = [i]; }
@@ -48,6 +51,7 @@
   }
   function answer(q) {
     var qt = tokens(q), best = null, bestScore = 0;
+    if (!qt.length) qt = String(q).toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
     KB.forEach(function (k) {
       var words = k.words.split(' '), score = 0;
       qt.forEach(function (t) {
@@ -82,7 +86,11 @@
     '.asst-f input{flex:1;min-width:0;height:44px;padding:0 .8rem;border:1.5px solid #DDE3EA;border-radius:10px;font-size:.95rem;background:#F5F7FA}' +
     '.asst-f input:focus{outline:none;border-color:#0C203B;background:#fff}' +
     '.asst-f button{width:44px;height:44px;border:0;border-radius:10px;background:#C4412B;color:#fff;cursor:pointer;display:grid;place-items:center}' +
-    '.asst-f button svg{width:18px;height:18px}' +
+    '.asst-f button svg{width:18px;height:18px}.asst-f button:disabled{opacity:.6;cursor:wait}' +
+    '.asst-dots{display:inline-flex;gap:4px;align-items:center;height:1.2em}.asst-dots i{width:6px;height:6px;border-radius:50%;background:#8A96A8;animation:asstb 1s infinite ease-in-out}' +
+    '.asst-dots i:nth-child(2){animation-delay:.15s}.asst-dots i:nth-child(3){animation-delay:.3s}' +
+    '@keyframes asstb{0%,80%,100%{opacity:.3;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}' +
+    '@media (prefers-reduced-motion:reduce){.asst-dots i{animation:none}}' +
     '@media print{.asst,.asst-btn{display:none!important}}';
 
   var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
@@ -94,7 +102,7 @@
     '<section class="asst" id="asst" role="dialog" aria-label="Questions about Amadu Kamal" hidden>' +
       '<div class="asst-h"><div style="display:flex;gap:.65rem;align-items:center"><img src="assets/img/amadu-kamal-480.webp" alt=""><div><b>Ask about Amadu</b><small>Quick answers about his work</small></div></div><button class="asst-x" type="button" aria-label="Close">&times;</button></div>' +
       '<div class="asst-log" aria-live="polite"></div>' +
-      '<div class="asst-chips"><button type="button">What do you do?</button><button type="button">Show me projects</button><button type="button">What is QuantAI?</button><button type="button">How do I contact you?</button></div>' +
+      '<div class="asst-chips"><button type="button">What services do you offer?</button><button type="button">Show me projects</button><button type="button">What is QuantAI?</button><button type="button">How do I contact you?</button></div>' +
       '<form class="asst-f"><label class="sr" for="asst-q">Your question</label><input id="asst-q" type="text" autocomplete="off" placeholder="Type a question…" maxlength="300"><button type="submit" aria-label="Send">' + sendIcon + '</button></form>' +
     '</section>';
   document.body.appendChild(wrap);
@@ -111,10 +119,59 @@
     if (v) { if (!log.children.length) add('Hi, I can answer quick questions about Amadu Kamal and Model Analysis Hub. What would you like to know?'); input.focus(); }
     else btn.focus();
   }
+  /* Turn the AI's plain text into safe HTML: escape everything, then allow **bold** and links to known places only */
+  function esc(t) { return t.replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function safeHref(u) {
+    if (/^(index|founder|projects|ai)\.html(#[\w-]+)?$/.test(u)) return u;
+    if (/^mailto:[\w.+-]+@[\w.-]+$/.test(u)) return u;
+    if (/^https:\/\/(wa\.me|www\.linkedin\.com|github\.com|sunshine-project-website\.vercel\.app|modelanalysishub\.com)(\/[^\s]*)?$/.test(u)) return u;
+    return null;
+  }
+  function linkTag(href, text) {
+    var ext = /^https:/.test(href) ? ' target="_blank" rel="noopener"' : '';
+    return '<a href="' + href + '"' + ext + '>' + text + '</a>';
+  }
+  function render(text) {
+    var h = esc(text);
+    h = h.replace(/\[([^\]]{1,80})\]\(([^)\s]{1,200})\)/g, function (m, t, u) {
+      var href = safeHref(u.replace(/&amp;/g, '&')); return href ? linkTag(esc(href), t) : t;
+    });
+    h = h.replace(/(^|[\s(])(https:\/\/[^\s<)]+)/g, function (m, pre, u) {
+      var clean = u.replace(/[.,;:]+$/, ''), tail = u.slice(clean.length), href = safeHref(clean.replace(/&amp;/g, '&'));
+      return pre + (href ? linkTag(esc(href), clean.replace(/^https:\/\//, '')) : clean) + tail;
+    });
+    h = h.replace(/\*\*([^*]{1,120})\*\*/g, '<b>$1</b>');
+    return h.replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>');
+  }
+
+  var history = [], busy = false;
   function ask(q) {
-    q = q.trim(); if (!q) return;
+    q = q.trim(); if (!q || busy) return;
     add(q, true); input.value = '';
-    setTimeout(function () { add(answer(q)); }, 250);
+    history.push({ role: 'user', content: q.slice(0, 600) });
+    if (!AI_URL) { setTimeout(function () { reply(answer(q), q); }, 250); return; }
+
+    busy = true; form.querySelector('button').disabled = true;
+    var typing = document.createElement('div');
+    typing.className = 'asst-m'; typing.setAttribute('aria-label', 'Typing');
+    typing.innerHTML = '<span class="asst-dots"><i></i><i></i><i></i></span>';
+    log.appendChild(typing); log.scrollTop = log.scrollHeight;
+
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 15000);
+    fetch(AI_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: history.slice(-10) }), signal: ctrl ? ctrl.signal : undefined
+    }).then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (d) { if (!d || typeof d.reply !== 'string' || !d.reply) throw 0; return d.reply; })
+      .then(function (text) { typing.remove(); reply(render(text), text); },
+            function () { typing.remove(); reply(answer(q), q); })
+      .then(function () { clearTimeout(timer); busy = false; form.querySelector('button').disabled = false; });
+  }
+  function reply(html, plain) {
+    add(html);
+    var t = document.createElement('div'); t.innerHTML = html;
+    history.push({ role: 'assistant', content: (t.textContent || plain || '').slice(0, 600) });
   }
   btn.addEventListener('click', function () { open(box.hidden); });
   wrap.querySelector('.asst-x').addEventListener('click', function () { open(false); });
