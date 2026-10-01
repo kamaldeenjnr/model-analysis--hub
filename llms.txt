@@ -15,7 +15,7 @@ Amadu Kamal built his skills through mentors and real projects. He combines the 
 
 - [Home](https://modelanalysishub.com/): Who Amadu Kamal is, what he does, selected work and contact details.
 - [About Amadu Kamal](https://modelanalysishub.com/founder.html): Full biography, toolkit and milestones.
-- [Projects](https://modelanalysishub.com/projects.html): Case studies of his models, dashboards and web platforms.
+- [Projects](https://modelanalysishub.com/projects.html): Case studies of his models, dashboards and web platforms, including Soma, his food delivery platform for the Volta Region.
 - [QuantAI](https://modelanalysishub.com/ai.html): Free data analysis tool. Upload a spreadsheet, ask questions about it, and get statistics, correlations, regression and forecasts in plain language.
 
 ## Expertise
@@ -28,6 +28,7 @@ Amadu Kamal built his skills through mentors and real projects. He combines the 
 
 ## Projects
 
+- [Soma](https://modelanalysishub.com/projects.html#soma) (2026, own product): A local food delivery platform for Ho, Hohoe and the Volta Region in Ghana, designed and built by Amadu Kamal. Customer, vendor, rider and admin apps; Mobile Money and card payments through Paystack with automatic payouts; phone notifications; installable web app. Live at https://soma-wmql.onrender.com, source at https://github.com/kamaldeenjnr/soma. Tools: Node.js, Express, SQLite, JavaScript, Paystack, Render.
 - [The Sunshine Project website](https://modelanalysishub.com/projects.html#sunshine-project) (2026, client project): A multi-page website for The Sunshine Project, a Ghanaian NGO, designed and built by Amadu Kamal. Includes an admin login so the NGO's team updates programmes, schedules and photos themselves. Live at https://sunshine-project-website.vercel.app. Tools: HTML, CSS, JavaScript, Python, Decap CMS, Vercel.
 - [Malaria risk prediction model, Ghana](https://modelanalysishub.com/projects.html#malaria-risk) (2025): A spatial model combining climate and population data to rank Ghana's regions by predicted malaria risk. Tools: Python, R, ArcGIS.
 - [Risk modelling: probability of high malaria burden](https://modelanalysishub.com/projects.html#risk-modeling): Estimates the chance that each region's prevalence exceeds 30%, for planning and preparedness.
