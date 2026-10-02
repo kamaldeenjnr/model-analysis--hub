@@ -2615,7 +2615,7 @@ async function saveFile(filename, data) {
     toast("Downloaded " + filename); return true;
   } catch (e) { toast("The download failed. Use the copy buttons instead."); return false; }
 }
-function qaTop() { const el = document.getElementById("quantai"); if (el && el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: "start" }); }
+function qaTop() { const m = document.getElementById("qa-main"); if (m) m.scrollTop = 0; }
 const getPath = (o, p) => p.split(".").reduce((a, k) => a == null ? a : a[k], o);
 function setPath(o, p, v) { const ks = p.split("."); let a = o; ks.slice(0, -1).forEach(k => { if (a[k] == null || typeof a[k] !== "object") a[k] = {}; a = a[k]; }); a[ks[ks.length - 1]] = v; }
 const varsUsable = () => S.ds ? S.ds.vars.filter(v => v.type !== "id") : [];
@@ -3264,7 +3264,7 @@ function render() {
   codeRegistry.clear();
   document.querySelectorAll(".qa-sections button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === S.section)));
   const tools = S.section === "method" ? METHOD_TOOLS : DATA_TOOLS, cur = S.tool[S.section];
-  $("#qa-rail").innerHTML = `<div class="rail-group"><h4>${S.section === "method" ? "Methodology" : "Data analysis"}</h4><nav aria-label="Tools">${tools.map(t => `<button data-act="tool" data-v="${t.id}" ${t.id === cur ? 'aria-current="page"' : ""}><span class="k">${t.k}</span><span>${esc(t.label)}</span><small>${esc(t.sub)}</small></button>`).join("")}</nav></div>
+  ($("#qa-rail") || {}).innerHTML = `<div class="rail-group"><h4>${S.section === "method" ? "Methodology" : "Data analysis"}</h4><nav aria-label="Tools">${tools.map(t => `<button data-act="tool" data-v="${t.id}" ${t.id === cur ? 'aria-current="page"' : ""}><span class="k">${t.k}</span><span>${esc(t.label)}</span><small>${esc(t.sub)}</small></button>`).join("")}</nav></div>
     <p class="rail-note">${S.section === "method" ? "Rule-based: the same answers always give the same advice." : `${S.log.length} analys${S.log.length === 1 ? "is" : "es"} in the log. Data never leave this tab.`}</p>`;
   const pages = { question: pageQuestion, design: pageDesign, sample: pageSample, test: pageTest, checklist: pageChecklist, forecast: pageForecast, data: pageData, describe: pageDescribe, compare: pageCompare, regression: pageRegression, survival: pageSurvival, export: pageExport, rules: pageRules };
   $("#qa-main").innerHTML = (pages[cur] || pages.question)();
@@ -3697,50 +3697,6 @@ function chatResultCard(m) {
     <div class="row"><button class="btn quiet sm" data-act="chat-open" data-sec="data" data-tool="${en.kind}" data-id="${en.id}">Open full result and code</button>${r.writeup ? `<button class="btn quiet sm" data-act="copy-apa" data-id="${en.id}">Copy write-up</button>` : ""}<button class="btn ghost sm" data-act="ai-explain" data-id="${en.id}" ${ex.busy ? "disabled" : ""}>${ex.busy ? '<span class="spin"></span> Explaining…' : "Explain in plain language"}</button></div>
   </div>`;
 }
-const CHAT_STARTERS = () => S.isExample && /hypertension/i.test(S.dsSource) ? [
-  "Compare systolic BP between men and women",
-  "Which factors are associated with hypertension? Use prevalence ratios.",
-  "Is loss to follow-up higher among people with hypertension?",
-  "Describe the sample by district",
-  "What study design fits a study of salt intake and hypertension?",
-  "How big a sample do I need to estimate hypertension prevalence?",
-] : ["Describe my data", "Which variables are related to my main outcome?", "Which test should I use for my research question?", "How should I report these results?"];
-function renderChat() {
-  codeRegistry.clear();
-  document.querySelectorAll(".qa-sections button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === "chat")));
-  const c = curChat();
-  $("#qa-rail").innerHTML = `<div class="rail-group"><h4>Conversations</h4>
-    <div style="padding:0 .6rem .5rem"><button class="btn sm" data-act="chat-new" style="width:100%;justify-content:center">New chat</button></div>
-    <nav aria-label="Conversations">${S.chats.length ? S.chats.map(x => `<button data-act="chat-pick" data-id="${x.id}" ${x.id === S.chatId ? 'aria-current="page"' : ""} style="grid-template-columns:1fr auto"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.title)}</span><span class="k" data-act="chat-del" data-id="${x.id}" role="button" aria-label="Delete conversation" title="Delete">×</span></button>`).join("") : `<p class="rail-note">No conversations yet.</p>`}</nav></div>
-    <p class="rail-note">Saved in this browser only. ${esc(S.ds ? `Data: ${S.dsSource} (${S.ds.nRows} rows).` : "")}</p>`;
-  const msgs = c ? c.messages : [];
-  $("#qa-main").innerHTML = `<header class="ph"><span class="eyebrow">QuantAI Chat</span><h2 class="ph-t">What would you like to find out?</h2>
-      <p>Ask about your study or your data in plain English. When you ask for an analysis, QuantAI runs it with its checked statistics and shows the result here, with the rules it applied.</p></header>
-    ${exampleBanner()}
-    <div class="card stack qa-chat" style="gap:1rem">
-      <div id="qa-thread" class="stack" style="gap:1rem;max-height:62vh;overflow-y:auto;padding-right:.25rem" aria-live="polite">
-        ${msgs.length ? msgs.map(m => m.role === "user"
-          ? `<div class="qa-you">${esc(m.content)}</div>`
-          : `<div class="qa-say"><span class="qa-by">QuantAI</span><div class="qa-said stack ${m.note === "error" ? "err" : ""}" style="gap:.5rem">${aiFormat(m.content)}</div>${chatResultCard(m)}</div>`).join("")
-          : `<div class="stack" style="gap:.8rem"><p class="sub">Start with a question about the example data, or upload your own file.</p><div class="starter-list">${CHAT_STARTERS().map(s => `<button type="button" data-act="chat-starter" data-text="${esc(s)}">${esc(s)}</button>`).join("")}</div></div>`}
-        ${S.chatBusy ? `<div class="sub"><span class="spin"></span> Thinking…</div>` : ""}
-      </div>
-      <form id="qa-chat-form" class="stack" style="gap:.5rem">
-        <label class="label" for="qa-chat-input">Message</label>
-        <textarea id="qa-chat-input" rows="2" maxlength="580" placeholder="e.g. Is BMI associated with hypertension after adjusting for age and sex?" style="min-height:3.2rem"></textarea>
-        <div class="row" style="justify-content:space-between;align-items:center">
-          <div class="row" style="gap:.4rem"><label class="btn quiet sm" style="cursor:pointer"><input type="file" id="qa-chat-file" accept=".csv,.txt,.tsv,.xlsx,.xls" hidden>Upload data</label>${msgs.length ? `<button class="btn quiet sm" type="button" data-act="chat-clear">Clear this chat</button>` : ""}</div>
-          <button class="btn" type="submit" ${S.chatBusy ? "disabled" : ""}>Send</button>
-        </div>
-      </form>
-      <p class="sub muted" style="font-size:.76rem">Your messages, variable names and summary statistics (never your file) go to the Model Analysis Hub assistant. QuantAI's own engine computes every result; the assistant chooses what to run and explains it, so check anything important.</p>
-    </div>`;
-  const th = $("#qa-thread"); if (th) th.scrollTop = th.scrollHeight;
-  persist();
-}
-const _baseRender = render;
-render = function () { if (S.section === "chat") return renderChat(); return _baseRender(); };
-
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]"); if (!el) return;
   const act = el.dataset.act;
@@ -3749,7 +3705,7 @@ document.addEventListener("click", e => {
   if (act === "chat-pick") { e.preventDefault(); S.chatId = el.dataset.id; render(); }
   if (act === "chat-starter") { e.preventDefault(); sendChatMessage(el.dataset.text); }
   if (act === "chat-clear") { e.preventDefault(); const c = curChat(); if (c) { c.messages = []; c.title = "New chat"; saveChats(); render(); } }
-  if (act === "chat-open") { e.preventDefault(); const id = +el.dataset.id; const en = S.log.find(x => x.id === id); if (en) S.cur[en.kind] = en; S.section = el.dataset.sec; S.tool[el.dataset.sec] = el.dataset.tool; render(); qaTop(); }
+  if (act === "chat-open") { e.preventDefault(); const id = +el.dataset.id; const en = S.log.find(x => x.id === id); if (en) S.cur[en.kind] = en; S.section = el.dataset.sec; S.tool[el.dataset.sec] = el.dataset.tool; render(); const mm = document.getElementById("qa-main"); if (mm) mm.scrollTop = 0; }
   if (act === "chat-rerun") { e.preventDefault(); const a = JSON.parse(el.dataset.i), c = curChat(); try { const r = runAction(a); c.messages.push({ role: "assistant", content: `Ran ${ACTION_LABEL[a.type] || "the analysis"} again with the current data.`, action: a, ref: r.entry ? r.entry.id : null, forecast: !!r.forecast }); } catch (err) { c.messages.push({ role: "assistant", content: err.message, note: "error" }); } saveChats(); render(); }
 });
 document.addEventListener("submit", e => {
@@ -3767,6 +3723,130 @@ document.addEventListener("change", async e => {
   c.messages.push(S.errors.data ? { role: "assistant", content: S.errors.data, note: "error" } : { role: "assistant", content: `Loaded **${f.name}**: ${S.ds.nRows} rows and ${S.ds.vars.length} variables. Check the variable types in Data & variables if anything looks wrong, then ask me what you'd like to analyse.` });
   saveChats(); render();
 });
+
+/* =====================================================================
+   QuantAI app shell (website build): a full-screen chat layout.
+   Sidebar: new chat, tools, chat history, data. Main: the conversation,
+   or a tool page with a way back to the chat.
+   ===================================================================== */
+const ICON = {
+  plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  menu: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>',
+  x: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  up: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  clip: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>',
+  back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
+  book: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14Z"/><path d="M20 17v4H6.5A2.5 2.5 0 0 1 4 18.5"/></svg>',
+  table: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>',
+  chat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>',
+  home: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
+};
+S.sideOpen = false;
+S.grpOpen = {};
+const grpIsOpen = sec => sec in S.grpOpen ? S.grpOpen[sec] : S.section === sec;
+const toolLabel = () => { const list = S.section === "method" ? METHOD_TOOLS : DATA_TOOLS; const t = list.find(x => x.id === S.tool[S.section]); return t ? t.label : ""; };
+
+function sideHTML() {
+  const toolBtn = (sec, t) => `<button class="side-item ${S.section === sec && S.tool[sec] === t.id ? "on" : ""}" data-act="tool-open" data-sec="${sec}" data-tool="${t.id}">${esc(t.label)}</button>`;
+  return `<div class="side-head">
+      <a class="side-brand" href="index.html" title="Model Analysis Hub home"><img src="assets/img/logo-mark.webp" alt="" width="28" height="28"><span>QuantAI</span></a>
+      <button class="icon-btn side-x" data-act="side-close" aria-label="Close sidebar">${ICON.x}</button></div>
+    <button class="side-new" data-act="chat-new">${ICON.plus}<span>New chat</span></button>
+    <div class="side-scroll">
+      <div class="side-h">Tools</div>
+      <details class="side-grp" data-grp="method" ${grpIsOpen("method") ? "open" : ""}><summary>${ICON.book}<span>Plan a study</span></summary>${METHOD_TOOLS.map(t => toolBtn("method", t)).join("")}</details>
+      <details class="side-grp" data-grp="data" ${grpIsOpen("data") ? "open" : ""}><summary>${ICON.table}<span>Analyse data</span></summary>${DATA_TOOLS.map(t => toolBtn("data", t)).join("")}</details>
+      <div class="side-h">Chats</div>
+      ${S.chats.length ? S.chats.map(c => `<div class="side-chat ${S.section === "chat" && c.id === S.chatId ? "on" : ""}"><button class="side-item" data-act="chat-pick" data-id="${c.id}" title="${esc(c.title)}">${esc(c.title)}</button><button class="icon-btn sm" data-act="chat-del" data-id="${c.id}" aria-label="Delete chat">${ICON.trash}</button></div>`).join("") : `<p class="side-empty">Your chats will appear here.</p>`}
+    </div>
+    <div class="side-foot">
+      <div class="side-data"><span class="side-h" style="padding:0">Data in use</span><b title="${esc(S.dsSource)}">${esc(S.dsSource)}</b><small>${S.ds ? `${S.ds.nRows.toLocaleString()} rows · ${S.ds.vars.length} variables` : ""}</small>
+        <div class="side-data-btns"><label class="side-link-btn">Upload data<input type="file" id="qa-side-file" accept=".csv,.txt,.tsv,.xlsx,.xls" hidden></label><button class="side-link-btn" data-act="tool-open" data-sec="data" data-tool="data">Variables</button></div></div>
+      <div class="side-links"><a href="index.html">${ICON.home}Model Analysis Hub</a><a href="https://wa.me/233595586430" target="_blank" rel="noopener">Talk to Amadu</a></div>
+    </div>`;
+}
+function composerHTML(big) {
+  return `<form id="qa-chat-form" class="composer ${big ? "big" : ""}">
+      <label class="icon-btn attach" title="Upload a CSV or Excel file">${ICON.clip}<input type="file" id="qa-chat-file" accept=".csv,.txt,.tsv,.xlsx,.xls" hidden><span class="sr">Upload data</span></label>
+      <textarea id="qa-chat-input" rows="1" maxlength="580" placeholder="Message QuantAI" aria-label="Message QuantAI"></textarea>
+      <button type="submit" class="send" aria-label="Send" ${S.chatBusy ? "disabled" : ""}>${ICON.up}</button>
+    </form>`;
+}
+const SUGGEST = () => S.isExample && /hypertension/i.test(S.dsSource) ? [
+  ["Compare blood pressure", "between men and women", "Compare systolic BP between men and women"],
+  ["Find risk factors", "for hypertension, as prevalence ratios", "Which factors are associated with hypertension? Use prevalence ratios."],
+  ["Survival analysis", "loss to follow-up by hypertension", "Is loss to follow-up higher among people with hypertension?"],
+  ["Plan a study", "design for salt intake and hypertension", "What study design fits a study of salt intake and hypertension?"],
+] : [["Describe my data", "a summary table of every variable", "Describe my data"], ["Find relationships", "with my main outcome", "Which variables are related to my main outcome?"], ["Choose a test", "for my research question", "Which test should I use for my research question?"], ["Report results", "in APA style", "How should I report these results?"]];
+
+function renderChatMain() {
+  const c = curChat(), msgs = c ? c.messages : [];
+  if (!msgs.length && !S.chatBusy) {
+    return `<div class="chat-empty">
+      <div class="chat-hello"><img src="assets/img/logo-mark.webp" alt="" width="44" height="44"><h1>What would you like to find out?</h1>
+        <p>Ask about your study or your data in plain English. QuantAI runs the statistics, checks the assumptions and explains the results.</p></div>
+      ${composerHTML(true)}
+      <div class="suggest">${SUGGEST().map(([a, b, t]) => `<button type="button" data-act="chat-starter" data-text="${esc(t)}"><b>${esc(a)}</b><span>${esc(b)}</span></button>`).join("")}</div>
+      <p class="chat-data">Using <b>${esc(S.dsSource)}</b>. Attach your own CSV or Excel file with the clip, or from the sidebar.</p>
+    </div>`;
+  }
+  return `<div class="chat-thread" id="qa-thread" aria-live="polite">
+      ${msgs.map(m => m.role === "user" ? `<div class="msg you"><div class="bubble">${esc(m.content)}</div></div>`
+        : `<div class="msg bot"><img class="av" src="assets/img/logo-mark.webp" alt="" width="28" height="28"><div class="body"><div class="text ${m.note === "error" ? "err" : ""}">${aiFormat(m.content)}</div>${chatResultCard(m)}</div></div>`).join("")}
+      ${S.chatBusy ? `<div class="msg bot"><img class="av" src="assets/img/logo-mark.webp" alt="" width="28" height="28"><div class="body"><div class="typing" aria-label="QuantAI is thinking"><i></i><i></i><i></i></div></div></div>` : ""}
+    </div>
+    <div class="chat-dock">${composerHTML(false)}<p class="disclaimer">QuantAI's engine computes every number. Explanations come from an AI assistant and can be wrong, so check anything important.</p></div>`;
+}
+function topHTML() {
+  if (S.section === "chat") { const c = curChat(); return `<button class="icon-btn only-m" data-act="side-open" aria-label="Open sidebar">${ICON.menu}</button><span class="top-title">${esc(c && c.messages.length ? c.title : "QuantAI")}</span><button class="icon-btn only-m" data-act="chat-new" aria-label="New chat">${ICON.plus}</button>`; }
+  return `<button class="icon-btn only-m" data-act="side-open" aria-label="Open sidebar">${ICON.menu}</button><button class="back-btn" data-act="to-chat">${ICON.back}<span>Back to chat</span></button><span class="top-title">${esc(S.section === "method" ? "Plan a study" : "Analyse data")} · ${esc(toolLabel())}</span>`;
+}
+const _baseRender = render;
+function appRender() {
+  const side = $("#qa-side"), main = $("#qa-main"), top = $("#qa-top"); if (!side || !main) return _baseRender();
+  side.innerHTML = sideHTML(); side.classList.toggle("open", S.sideOpen);
+  const scrim = $("#qa-scrim"); if (scrim) scrim.hidden = !S.sideOpen;
+  top.innerHTML = topHTML();
+  if (S.section === "chat") {
+    codeRegistry.clear();
+    main.className = "qa-main is-chat"; main.innerHTML = renderChatMain();
+    main.scrollTop = main.scrollHeight;
+    persist();
+  } else {
+    main.className = "qa-main is-tool";
+    _baseRender();
+    const wrap = document.createElement("div"); wrap.className = "tool-wrap";
+    while (main.firstChild) wrap.appendChild(main.firstChild);
+    main.appendChild(wrap);
+  }
+  autoGrow();
+}
+render = appRender;
+function autoGrow() { const t = $("#qa-chat-input"); if (!t) return; t.style.height = "auto"; t.style.height = Math.min(220, t.scrollHeight) + "px"; }
+function scrollMainTop() { const m = $("#qa-main"); if (m) m.scrollTop = 0; }
+
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]"); if (!el) return;
+  const act = el.dataset.act;
+  if (act === "tool-open") { e.preventDefault(); S.section = el.dataset.sec; S.tool[S.section] = el.dataset.tool; S.sideOpen = false; render(); scrollMainTop(); }
+  if (act === "to-chat") { e.preventDefault(); S.section = "chat"; render(); }
+  if (act === "side-open") { e.preventDefault(); S.sideOpen = true; render(); }
+  if (act === "side-close") { e.preventDefault(); S.sideOpen = false; render(); }
+  if (act === "chat-new" || act === "chat-pick") { S.section = "chat"; S.sideOpen = false; setTimeout(() => { render(); const i = $("#qa-chat-input"); if (i && window.innerWidth > 900) i.focus(); }, 0); }
+  if (act === "chat-starter" || act === "chat-rerun") { S.section = "chat"; }
+});
+document.addEventListener("input", e => { if (e.target.id === "qa-chat-input") autoGrow(); });
+document.addEventListener("change", async e => {
+  if (e.target.id !== "qa-side-file" || !e.target.files[0]) return;
+  const f = e.target.files[0]; e.target.value = ""; S.sideOpen = false;
+  await readFile(f);
+  if (!S.errors.data) { const c = curChat() || newChat(); c.messages.push({ role: "assistant", content: `Loaded **${f.name}**: ${S.ds.nRows} rows and ${S.ds.vars.length} variables. Check the variable types under Analyse data → Data & variables if anything looks wrong, then ask me what you'd like to find out.` }); saveChats(); S.section = "chat"; }
+  render();
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape" && S.sideOpen) { S.sideOpen = false; render(); } });
+document.addEventListener("click", e => { if (e.target.id === "qa-scrim") { S.sideOpen = false; render(); } });
+document.addEventListener("toggle", e => { const d = e.target; if (d.classList && d.classList.contains("side-grp")) S.grpOpen[d.dataset.grp] = d.open; }, true);
 
 /* ---------- start-up ---------- */
 function start() {
