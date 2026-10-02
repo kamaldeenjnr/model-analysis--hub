@@ -3680,7 +3680,7 @@ async function sendChatMessage(text) {
 function chatResultCard(m) {
   if (m.forecast && S.fc.res) {
     const r = S.fc.res, hw = r.hw, Q = window.QuantAI;
-    return `<div class="card stack" style="padding:1rem"><div class="res-head"><h3>Forecast of ${esc(vlabel(V(r.yv)))}</h3><span class="pill acc">${hw.seasonal ? "Holt-Winters (seasonal)" : "Holt's linear trend"}</span></div>
+    return `<div class="qa-result"><div class="res-head"><h3>Forecast of ${esc(vlabel(V(r.yv)))}</h3><span class="pill acc">${hw.seasonal ? "Holt-Winters (seasonal)" : "Holt's linear trend"}</span></div>
       ${tableHTML({ title: "Next periods", columns: ["Period", "Forecast", "80% range"], rows: hw.forecast.slice(0, 6).map((v, i) => [r.fx[i], Q.fmt(v), `${Q.fmt(hw.lower[i])} to ${Q.fmt(hw.upper[i])}`]) })}
       <div class="row"><button class="btn quiet sm" data-act="chat-open" data-sec="data" data-tool="forecast">Open the full forecast</button></div></div>`;
   }
@@ -3688,7 +3688,7 @@ function chatResultCard(m) {
   if (!en) return m.action && !m.failed && m.action.type !== "open" ? `<div class="notice info" style="font-size:.84rem">${esc(ACTION_LABEL[m.action.type] || "Analysis")} from an earlier visit. Results aren't stored, so the data must be loaded again. <button class="btn quiet sm" data-act="chat-rerun" data-i="${esc(JSON.stringify(m.action))}">Run it again</button></div>` : "";
   const r = en.result, main = r.tables.find(t => /coefficient|ratio|Fixed|Hazard|t-test|ANOVA|Kruskal|Mann|chi|Fisher|correlation|McNemar|Wilcoxon|Table 1/i.test(t.title)) || r.tables[0];
   const ex = S.explain[en.id] || {};
-  return `<div class="card stack" style="padding:1rem">
+  return `<div class="qa-result">
     <div class="res-head"><div class="stack" style="gap:.15rem"><span class="sect-t">Analysis ${en.k}</span><h3>${esc(r.title)}</h3></div><div class="meta"><span class="pill acc">${esc(r.method)}</span>${r.n ? `<span class="pill num">n = ${r.n}</span>` : ""}</div></div>
     <details class="fold"><summary>Rules applied (${r.decision.length})</summary>${auditHTML(r.decision)}</details>
     ${tableHTML(Object.assign({}, main, { rows: main.rows.slice(0, 12) }))}
@@ -3714,15 +3714,15 @@ function renderChat() {
     <nav aria-label="Conversations">${S.chats.length ? S.chats.map(x => `<button data-act="chat-pick" data-id="${x.id}" ${x.id === S.chatId ? 'aria-current="page"' : ""} style="grid-template-columns:1fr auto"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.title)}</span><span class="k" data-act="chat-del" data-id="${x.id}" role="button" aria-label="Delete conversation" title="Delete">×</span></button>`).join("") : `<p class="rail-note">No conversations yet.</p>`}</nav></div>
     <p class="rail-note">Saved in this browser only. ${esc(S.ds ? `Data: ${S.dsSource} (${S.ds.nRows} rows).` : "")}</p>`;
   const msgs = c ? c.messages : [];
-  $("#qa-main").innerHTML = `<header class="ph"><span class="eyebrow">QuantAI Chat</span><h2 class="ph-t">Ask, analyse, explain</h2>
+  $("#qa-main").innerHTML = `<header class="ph"><span class="eyebrow">QuantAI Chat</span><h2 class="ph-t">What would you like to find out?</h2>
       <p>Ask about your study or your data in plain English. When you ask for an analysis, QuantAI runs it with its checked statistics and shows the result here, with the rules it applied.</p></header>
     ${exampleBanner()}
-    <div class="card stack" style="gap:1rem">
+    <div class="card stack qa-chat" style="gap:1rem">
       <div id="qa-thread" class="stack" style="gap:1rem;max-height:62vh;overflow-y:auto;padding-right:.25rem" aria-live="polite">
         ${msgs.length ? msgs.map(m => m.role === "user"
-          ? `<div style="align-self:flex-end;max-width:85%;background:var(--accent);color:var(--accent-ink);padding:.6rem .9rem;border-radius:14px 14px 3px 14px;white-space:pre-wrap">${esc(m.content)}</div>`
-          : `<div class="stack" style="gap:.6rem;max-width:100%"><div style="max-width:92%;background:${m.note === "error" ? "var(--warn-soft)" : "var(--surface-2)"};padding:.7rem .95rem;border-radius:14px 14px 14px 3px" class="stack">${aiFormat(m.content)}</div>${chatResultCard(m)}</div>`).join("")
-          : `<div class="stack" style="gap:.6rem"><p class="sub">Try one of these, or type your own question:</p><div class="chips">${CHAT_STARTERS().map(s => `<button class="chip" data-act="chat-starter" data-text="${esc(s)}">${esc(s)}</button>`).join("")}</div></div>`}
+          ? `<div class="qa-you">${esc(m.content)}</div>`
+          : `<div class="qa-say"><span class="qa-by">QuantAI</span><div class="qa-said stack ${m.note === "error" ? "err" : ""}" style="gap:.5rem">${aiFormat(m.content)}</div>${chatResultCard(m)}</div>`).join("")
+          : `<div class="stack" style="gap:.8rem"><p class="sub">Start with a question about the example data, or upload your own file.</p><div class="starter-list">${CHAT_STARTERS().map(s => `<button type="button" data-act="chat-starter" data-text="${esc(s)}">${esc(s)}</button>`).join("")}</div></div>`}
         ${S.chatBusy ? `<div class="sub"><span class="spin"></span> Thinking…</div>` : ""}
       </div>
       <form id="qa-chat-form" class="stack" style="gap:.5rem">
