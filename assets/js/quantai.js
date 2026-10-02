@@ -640,6 +640,216 @@ const Stats = (function () {
 if (false) module.exports = Stats;
 
 /* =====================================================================
+   Stats extensions: survival analysis, ordinal and multinomial logistic
+   regression, linear mixed model (random intercept, REML).
+   Verified against statsmodels in test/compare_ext.py.
+   ===================================================================== */
+(function (S) {
+  "use strict";
+  const dot = (a, b) => { let s = 0; for (let i = 0; i < a.length; i++) s += a[i] * b[i]; return s; };
+  const mv = (A, v) => A.map(r => dot(r, v));
+  const zeros = (r, c) => Array.from({ length: r }, () => new Array(c).fill(0));
+  const q975 = () => S.normQuantile(0.975);
+  const pz = z => Math.max(0, Math.min(1, 2 * S.normSf(Math.abs(z))));
+
+  /* ---------------- Kaplan–Meier with Greenwood SE and log(-log) CI ---------------- */
+  function kaplanMeier(time, event) {
+    const idx = time.map((t, i) => i).sort((a, b) => time[a] - time[b]);
+    const out = [{ t: 0, n: time.length, d: 0, c: 0, s: 1, lo: 1, hi: 1 }];
+    let s = 1, gw = 0, atRisk = time.length, k = 0;
+    while (k < idx.length) {
+      const t = time[idx[k]]; let d = 0, c = 0;
+      while (k < idx.length && time[idx[k]] === t) { if (event[idx[k]]) d++; else c++; k++; }
+      if (d > 0) {
+        s *= 1 - d / atRisk;
+        if (atRisk > d) gw += d / (atRisk * (atRisk - d));
+        let lo = s, hi = s;
+        if (s > 0 && s < 1) { const se = Math.sqrt(gw) / Math.abs(Math.log(s)), z = q975(); lo = Math.pow(s, Math.exp(z * se)); hi = Math.pow(s, Math.exp(-z * se)); }
+        out.push({ t, n: atRisk, d, c, s, lo, hi });
+      }
+      atRisk -= d + c;
+    }
+    const med = out.find(r => r.s <= 0.5);
+    const medLo = out.find(r => r.hi <= 0.5), medHi = out.find(r => r.lo <= 0.5);
+    return { table: out, median: med ? med.t : null, medianLo: medHi ? medHi.t : null, medianHi: medLo ? medLo.t : null, n: time.length, events: event.filter(Boolean).length };
+  }
+  /** Log-rank test for k groups (Mantel–Haenszel), as R survdiff / statsmodels survdiff. */
+  function logRank(time, event, group) {
+    const lv = [...new Set(group)], k = lv.length, gi = group.map(g => lv.indexOf(g));
+    const ts = [...new Set(time.filter((t, i) => event[i]))].sort((a, b) => a - b);
+    const O = new Array(k).fill(0), E = new Array(k).fill(0), V = zeros(k, k);
+    ts.forEach(t => {
+      const n = new Array(k).fill(0), d = new Array(k).fill(0);
+      for (let i = 0; i < time.length; i++) { if (time[i] >= t) n[gi[i]]++; if (time[i] === t && event[i]) d[gi[i]]++; }
+      const N = S.sum(n), D = S.sum(d); if (N < 2) { for (let j = 0; j < k; j++) { O[j] += d[j]; E[j] += D * n[j] / N; } return; }
+      for (let j = 0; j < k; j++) {
+        O[j] += d[j]; E[j] += D * n[j] / N;
+        for (let m = 0; m < k; m++) V[j][m] += (j === m ? D * (n[j] / N) * (1 - n[j] / N) : -D * n[j] * n[m] / (N * N)) * (N - D) / (N - 1);
+      }
+    });
+    const U = O.map((o, j) => o - E[j]).slice(0, k - 1), Vr = V.slice(0, k - 1).map(r => r.slice(0, k - 1));
+    const chi2 = dot(U, mv(S.matInverse(Vr), U)), df = k - 1;
+    return { chi2, df, p: S.chi2Sf(chi2, df), levels: lv, observed: O, expected: E };
+  }
+  /** Cox proportional hazards, Efron ties, Newton–Raphson with step halving. */
+  function coxPH(X, time, event, names) {
+    const n = X.length, p = X[0].length;
+    const order = time.map((t, i) => i).sort((a, b) => time[b] - time[a]); // descending
+    function evalAt(beta, needH) {
+      const eta = X.map(r => dot(r, beta)), w = eta.map(Math.exp);
+      let ll = 0; const g = new Array(p).fill(0), H = needH ? zeros(p, p) : null;
+      let S0 = 0; const S1 = new Array(p).fill(0), S2 = needH ? zeros(p, p) : null;
+      let k = 0;
+      while (k < n) {
+        const t = time[order[k]], grp = [];
+        while (k < n && time[order[k]] === t) { grp.push(order[k]); k++; }
+        grp.forEach(i => { S0 += w[i]; for (let a = 0; a < p; a++) { S1[a] += w[i] * X[i][a]; if (needH) for (let b = 0; b < p; b++) S2[a][b] += w[i] * X[i][a] * X[i][b]; } });
+        const D = grp.filter(i => event[i]); const d = D.length; if (!d) continue;
+        let D0 = 0; const D1 = new Array(p).fill(0), D2 = needH ? zeros(p, p) : null;
+        D.forEach(i => { ll += eta[i]; D0 += w[i]; for (let a = 0; a < p; a++) { g[a] += X[i][a]; D1[a] += w[i] * X[i][a]; if (needH) for (let b = 0; b < p; b++) D2[a][b] += w[i] * X[i][a] * X[i][b]; } });
+        for (let l = 0; l < d; l++) {
+          const f = l / d, phi = S0 - f * D0; ll -= Math.log(phi);
+          const a1 = S1.map((v, a) => v - f * D1[a]);
+          for (let a = 0; a < p; a++) { g[a] -= a1[a] / phi; if (needH) for (let b = 0; b < p; b++) H[a][b] -= (S2[a][b] - f * D2[a][b]) / phi - a1[a] * a1[b] / (phi * phi); }
+        }
+      }
+      return { ll, g, H };
+    }
+    let beta = new Array(p).fill(0), cur = evalAt(beta, true), converged = false, it = 0;
+    const ll0 = cur.ll;
+    for (it = 0; it < 60; it++) {
+      const inv = S.matInverse(cur.H.map(r => r.map(v => -v)));
+      let step = mv(inv, cur.g), nb = beta.map((b, i) => b + step[i]), nx = evalAt(nb, true), h = 0;
+      while (nx.ll < cur.ll - 1e-10 && h < 30) { step = step.map(s => s / 2); nb = beta.map((b, i) => b + step[i]); nx = evalAt(nb, true); h++; }
+      const ch = Math.abs(nx.ll - cur.ll); beta = nb; cur = nx;
+      if (ch < 1e-10 || Math.max(...step.map(Math.abs)) < 1e-9) { converged = true; break; }
+    }
+    const cov = S.matInverse(cur.H.map(r => r.map(v => -v))), z = q975();
+    const coefs = beta.map((b, i) => { const se = Math.sqrt(Math.max(cov[i][i], 0)); return { name: names[i], coef: b, se, z: b / se, p: pz(b / se), exp: Math.exp(b), expLow: Math.exp(b - z * se), expHigh: Math.exp(b + z * se) }; });
+    const lr = 2 * (cur.ll - ll0);
+    return { coefs, ll: cur.ll, ll0, lr, lrDf: p, lrP: S.chi2Sf(lr, p), converged, n, events: event.filter(Boolean).length, separation: !converged || beta.some(b => Math.abs(b) > 15) };
+  }
+
+  /* ---------------- generic Newton maximiser with numerical Hessian ---------------- */
+  function maximize(f, grad, x0, opts) {
+    opts = opts || {};
+    let x = [...x0], fx = f(x), converged = false, it = 0;
+    const hess = xx => { const k = xx.length, H = zeros(k, k), g0 = grad(xx); for (let j = 0; j < k; j++) { const h = 1e-5 * Math.max(1, Math.abs(xx[j])); const xp = [...xx]; xp[j] += h; const g1 = grad(xp); for (let i = 0; i < k; i++) H[i][j] = (g1[i] - g0[i]) / h; } for (let i = 0; i < k; i++) for (let j = 0; j < i; j++) { const a = (H[i][j] + H[j][i]) / 2; H[i][j] = a; H[j][i] = a; } return H; };
+    for (it = 0; it < (opts.maxIter || 100); it++) {
+      const g = grad(x), H = hess(x);
+      let step; try { step = mv(S.matInverse(H.map(r => r.map(v => -v))), g); } catch (e) { step = g.map(v => v * 1e-3); }
+      let nx = x.map((v, i) => v + step[i]), nf = f(nx), h = 0;
+      while ((!isFinite(nf) || nf < fx - 1e-12) && h < 40) { step = step.map(s => s / 2); nx = x.map((v, i) => v + step[i]); nf = f(nx); h++; }
+      const ch = Math.abs(nf - fx); x = nx; fx = nf;
+      if (ch < 1e-11 && Math.max(...step.map(Math.abs)) < 1e-7) { converged = true; break; }
+    }
+    return { x, fx, converged, H: hess(x), iterations: it + 1 };
+  }
+  const logistic = v => v >= 0 ? 1 / (1 + Math.exp(-v)) : Math.exp(v) / (1 + Math.exp(v));
+
+  /* ---------------- ordinal logistic (proportional odds) ---------------- */
+  /** P(Y ≤ j) = logistic(θ_j − xβ). y in 0..K−1. Same sign convention as Stata ologit, R polr, statsmodels OrderedModel. */
+  function ordinalLogit(X, y, names, levelNames) {
+    const n = X.length, p = X[0].length, K = Math.max(...y) + 1, nt = K - 1;
+    const cum = []; let acc = 0; for (let j = 0; j < nt; j++) { acc += y.filter(v => v === j).length / n; cum.push(Math.log(Math.min(.999, Math.max(.001, acc)) / (1 - Math.min(.999, Math.max(.001, acc))))); }
+    const f = par => {
+      const th = par.slice(0, nt), b = par.slice(nt); for (let j = 1; j < nt; j++) if (th[j] <= th[j - 1]) return -Infinity;
+      let ll = 0;
+      for (let i = 0; i < n; i++) { const e = dot(X[i], b), yi = y[i]; const up = yi < nt ? logistic(th[yi] - e) : 1, lo = yi > 0 ? logistic(th[yi - 1] - e) : 0; ll += Math.log(Math.max(up - lo, 1e-300)); }
+      return ll;
+    };
+    const grad = par => {
+      const th = par.slice(0, nt), b = par.slice(nt), g = new Array(nt + p).fill(0);
+      for (let i = 0; i < n; i++) {
+        const e = dot(X[i], b), yi = y[i];
+        const Fu = yi < nt ? logistic(th[yi] - e) : 1, Fl = yi > 0 ? logistic(th[yi - 1] - e) : 0, pr = Math.max(Fu - Fl, 1e-300);
+        const fu = yi < nt ? Fu * (1 - Fu) : 0, fl = yi > 0 ? Fl * (1 - Fl) : 0;
+        if (yi < nt) g[yi] += fu / pr; if (yi > 0) g[yi - 1] -= fl / pr;
+        const db = -(fu - fl) / pr; for (let a = 0; a < p; a++) g[nt + a] += db * X[i][a];
+      }
+      return g;
+    };
+    const r = maximize(f, grad, [...cum, ...new Array(p).fill(0)]);
+    const cov = S.matInverse(r.H.map(row => row.map(v => -v))), z = q975();
+    const se = cov.map((row, i) => Math.sqrt(Math.max(row[i], 0)));
+    const coefs = names.map((nm, a) => { const b = r.x[nt + a], s = se[nt + a]; return { name: nm, coef: b, se: s, z: b / s, p: pz(b / s), exp: Math.exp(b), expLow: Math.exp(b - z * s), expHigh: Math.exp(b + z * s) }; });
+    const thresholds = r.x.slice(0, nt).map((t, j) => ({ name: `${levelNames[j]} | ${levelNames[j + 1]}`, coef: t, se: se[j] }));
+    let ll0 = 0; for (let j = 0; j < K; j++) { const c = y.filter(v => v === j).length; if (c) ll0 += c * Math.log(c / n); }
+    const lr = 2 * (r.fx - ll0);
+    return { coefs, thresholds, ll: r.fx, ll0, lr, lrDf: p, lrP: S.chi2Sf(lr, p), mcFadden: 1 - r.fx / ll0, converged: r.converged, n, K, aic: -2 * r.fx + 2 * (nt + p) };
+  }
+
+  /* ---------------- multinomial logistic (reference = category 0) ---------------- */
+  function multinomialLogit(X, y, names, levelNames) {
+    const n = X.length, Xd = X.map(r => [1, ...r]), p = Xd[0].length, K = Math.max(...y) + 1, m = K - 1, P = m * p;
+    let B = zeros(m, p);
+    const probs = (Bm, x) => { const e = Bm.map(b => dot(b, x)), mx = Math.max(0, ...e), ex = e.map(v => Math.exp(v - mx)), den = Math.exp(-mx) + S.sum(ex); return ex.map(v => v / den); };
+    const ll = Bm => { let s = 0; for (let i = 0; i < n; i++) { const pr = probs(Bm, Xd[i]); const p0 = 1 - S.sum(pr); s += Math.log(Math.max(y[i] === 0 ? p0 : pr[y[i] - 1], 1e-300)); } return s; };
+    let cur = ll(B), converged = false, H = null, it;
+    for (it = 0; it < 100; it++) {
+      const g = new Array(P).fill(0); H = zeros(P, P);
+      for (let i = 0; i < n; i++) {
+        const pr = probs(B, Xd[i]), x = Xd[i];
+        for (let a = 0; a < m; a++) {
+          const r = (y[i] === a + 1 ? 1 : 0) - pr[a];
+          for (let u = 0; u < p; u++) g[a * p + u] += r * x[u];
+          for (let b = 0; b < m; b++) { const w = pr[a] * ((a === b ? 1 : 0) - pr[b]); for (let u = 0; u < p; u++) for (let v = 0; v < p; v++) H[a * p + u][b * p + v] -= w * x[u] * x[v]; }
+        }
+      }
+      let step = mv(S.matInverse(H.map(r => r.map(v => -v))), g), h = 0;
+      let NB = B.map((row, a) => row.map((v, u) => v + step[a * p + u])), nl = ll(NB);
+      while (nl < cur - 1e-10 && h < 30) { step = step.map(s => s / 2); NB = B.map((row, a) => row.map((v, u) => v + step[a * p + u])); nl = ll(NB); h++; }
+      const ch = Math.abs(nl - cur); B = NB; cur = nl;
+      if (ch < 1e-10 || Math.max(...step.map(Math.abs)) < 1e-9) { converged = true; break; }
+    }
+    // final Hessian at the optimum
+    H = zeros(P, P);
+    for (let i = 0; i < n; i++) { const pr = probs(B, Xd[i]), x = Xd[i]; for (let a = 0; a < m; a++) for (let b = 0; b < m; b++) { const w = pr[a] * ((a === b ? 1 : 0) - pr[b]); for (let u = 0; u < p; u++) for (let v = 0; v < p; v++) H[a * p + u][b * p + v] -= w * x[u] * x[v]; } }
+    const cov = S.matInverse(H.map(r => r.map(v => -v))), z = q975();
+    const equations = B.map((row, a) => ({ level: levelNames[a + 1], coefs: row.map((b, u) => { const se = Math.sqrt(Math.max(cov[a * p + u][a * p + u], 0)); return { name: u === 0 ? "Intercept" : names[u - 1], coef: b, se, z: b / se, p: pz(b / se), exp: Math.exp(b), expLow: Math.exp(b - z * se), expHigh: Math.exp(b + z * se) }; }) }));
+    let ll0 = 0; for (let j = 0; j < K; j++) { const c = y.filter(v => v === j).length; if (c) ll0 += c * Math.log(c / n); }
+    const lr = 2 * (cur - ll0), df = m * (p - 1);
+    return { equations, reference: levelNames[0], ll: cur, ll0, lr, lrDf: df, lrP: S.chi2Sf(lr, df), mcFadden: 1 - cur / ll0, converged, n, K, separation: !converged || B.some(r => r.some(v => Math.abs(v) > 15)) };
+  }
+
+  /* ---------------- linear mixed model, random intercept, REML ---------------- */
+  function mixedRandomIntercept(X, y, groups, names) {
+    const n = X.length, Xd = X.map(r => [1, ...r]), p = Xd[0].length;
+    const glev = [...new Set(groups)], G = glev.map(g => []); groups.forEach((g, i) => G[glev.indexOf(g)].push(i));
+    function fitAt(lam) {
+      // V_g = I + lam J ; V_g^-1 = I - c_g J, c_g = lam/(1+n_g lam)
+      const XtVX = zeros(p, p), XtVy = new Array(p).fill(0); let logdet = 0;
+      G.forEach(ix => {
+        const ng = ix.length, c = lam / (1 + ng * lam); logdet += Math.log(1 + ng * lam);
+        const sx = new Array(p).fill(0); let sy = 0; ix.forEach(i => { for (let a = 0; a < p; a++) sx[a] += Xd[i][a]; sy += y[i]; });
+        ix.forEach(i => { for (let a = 0; a < p; a++) { XtVy[a] += Xd[i][a] * y[i]; for (let b = 0; b < p; b++) XtVX[a][b] += Xd[i][a] * Xd[i][b]; } });
+        for (let a = 0; a < p; a++) { XtVy[a] -= c * sx[a] * sy; for (let b = 0; b < p; b++) XtVX[a][b] -= c * sx[a] * sx[b]; }
+      });
+      const inv = S.matInverse(XtVX), beta = mv(inv, XtVy);
+      let q = 0; G.forEach(ix => { const ng = ix.length, c = lam / (1 + ng * lam); let sr = 0, ss = 0; ix.forEach(i => { const r = y[i] - dot(Xd[i], beta); sr += r; ss += r * r; }); q += ss - c * sr * sr; });
+      const s2 = q / (n - p);
+      // log|X'V^-1X| via LU-free determinant from Cholesky-like elimination
+      let ld = 0; { const M = XtVX.map(r => [...r]); for (let k = 0; k < p; k++) { let piv = k; for (let r = k + 1; r < p; r++) if (Math.abs(M[r][k]) > Math.abs(M[piv][k])) piv = r; [M[k], M[piv]] = [M[piv], M[k]]; ld += Math.log(Math.abs(M[k][k])); for (let r = k + 1; r < p; r++) { const f = M[r][k] / M[k][k]; for (let c2 = k; c2 < p; c2++) M[r][c2] -= f * M[k][c2]; } } }
+      const reml = -0.5 * ((n - p) * Math.log(s2) + logdet + ld + (n - p) * (1 + Math.log(2 * Math.PI)));
+      return { beta, inv, s2, reml };
+    }
+    // golden-section on t = log(lam), plus the boundary lam = 0
+    let a = Math.log(1e-8), b = Math.log(1e4); const gr = (Math.sqrt(5) - 1) / 2;
+    let c1 = b - gr * (b - a), c2 = a + gr * (b - a), f1 = fitAt(Math.exp(c1)).reml, f2 = fitAt(Math.exp(c2)).reml;
+    for (let i = 0; i < 200 && b - a > 1e-10; i++) { if (f1 > f2) { b = c2; c2 = c1; f2 = f1; c1 = b - gr * (b - a); f1 = fitAt(Math.exp(c1)).reml; } else { a = c1; c1 = c2; f1 = f2; c2 = a + gr * (b - a); f2 = fitAt(Math.exp(c2)).reml; } }
+    let lam = Math.exp((a + b) / 2), best = fitAt(lam); const at0 = fitAt(0);
+    if (at0.reml >= best.reml) { lam = 0; best = at0; }
+    const z = q975();
+    const coefs = best.beta.map((bv, i) => { const se = Math.sqrt(Math.max(best.s2 * best.inv[i][i], 0)); return { name: i === 0 ? "Intercept" : names[i - 1], coef: bv, se, z: bv / se, p: pz(bv / se), ciLow: bv - z * se, ciHigh: bv + z * se }; });
+    const tau2 = lam * best.s2;
+    return { coefs, sigma2: best.s2, tau2, icc: tau2 / (tau2 + best.s2), reml: best.reml, nGroups: glev.length, n, groupSizes: G.map(g => g.length), boundary: lam === 0 };
+  }
+
+  Object.assign(S, { kaplanMeier, logRank, coxPH, ordinalLogit, multinomialLogit, mixedRandomIntercept });
+})(typeof Stats !== "undefined" ? Stats : require("./stats.js"));
+if (false) module.exports = require("./stats.js");
+
+/* =====================================================================
    Data layer: parsing, clean names, missing values, type inference.
    ===================================================================== */
 const Data = (function () {
@@ -1301,6 +1511,159 @@ const Analysis = (function () {
 if (false) module.exports = Analysis;
 
 /* =====================================================================
+   Analysis extensions: ordinal, multinomial and mixed-effects regression,
+   and survival analysis (Kaplan–Meier, log-rank, Cox).
+   ===================================================================== */
+(function (A) {
+  "use strict";
+  const S = (typeof Stats !== "undefined") ? Stats : require("./stats_ext.js");
+  const D = (typeof Data !== "undefined") ? Data : require("./data.js");
+  const { f, pAPA, pCell, noLead } = A.fmt;
+  const lab = v => v.label && v.label !== v.name ? v.label : v.name;
+  const CONT = ["continuous", "count"];
+  const userError = m => Object.assign(new Error(m), { user: true });
+  const missingWarn = (ds, rows, vars) => rows.length < ds.nRows ? [`${ds.nRows - rows.length} row(s) with a missing value in ${vars.map(v => `"${lab(v)}"`).join(" or ")} were excluded (complete-case analysis).`] : [];
+  function design(preds, rows) {
+    const terms = preds.map(v => {
+      if (CONT.includes(v.type)) return { v, cols: [{ name: lab(v), level: null }] };
+      const lv = v.levels.filter(l => rows.some(i => v.values[i] === l));
+      return { v, ref: lv[0], cols: lv.slice(1).map(l => ({ name: `${lab(v)}: ${l} (vs ${lv[0]})`, level: l })) };
+    });
+    return { terms, names: terms.flatMap(t => t.cols.map(c => c.name)), X: rows.map(i => terms.flatMap(t => t.cols.map(c => c.level === null ? Number(t.v.values[i]) : (t.v.values[i] === c.level ? 1 : 0)))) };
+  }
+  function vifRule(X, names, decision) {
+    const vifs = S.vif(X, names); if (!vifs) return null;
+    const worst = vifs.reduce((m, v) => v.vif > m.vif ? v : m, vifs[0]);
+    decision.push({ rule: "Multicollinearity (VIF)", detail: `Highest VIF ${f(worst.vif)} (${worst.name}) → ${worst.vif > 10 ? "serious: predictors are redundant" : worst.vif > 5 ? "moderate: check these predictors" : "no concern"}`, ok: worst.vif <= 5 });
+    return vifs;
+  }
+  const refRules = (terms, decision) => terms.forEach(t => { if (t.ref !== undefined) decision.push({ rule: "Reference category", detail: `"${lab(t.v)}": ${t.ref} is the reference; ${t.cols.length} indicator variable(s) created.` }); });
+
+  /* ---------------- ordinal / multinomial / mixed ---------------- */
+  function regressionExt(ds, y, preds, opts) {
+    opts = opts || {}; const alpha = opts.alpha || 0.05, model = opts.model;
+    if (!preds.length) throw userError("Choose at least one predictor.");
+    const cluster = opts.cluster ? ds.vars.find(v => v.name === opts.cluster) : null;
+    if (model === "mixed" && !cluster) throw userError("A mixed model needs a cluster variable (for example clinic, village, school, or participant ID for repeated measures).");
+    if (cluster && preds.some(p => p.name === cluster.name)) throw userError("The cluster variable cannot also be a predictor.");
+    const rows = D.completeRows(ds, [y, ...preds]).filter(i => !cluster || cluster.values[i] !== null);
+    const decision = [], warnings = missingWarn(ds, rows, [y, ...preds, ...(cluster ? [cluster] : [])]);
+    const { names, X, terms } = design(preds, rows), k = names.length, n = rows.length;
+    if (n <= k + 2) throw userError(`Only ${n} complete rows for ${k} predictor parameters — too few to fit the model.`);
+    refRules(terms, decision);
+    const tables = []; let fit, writeup, method, chart = null;
+    const adj = preds.length > 1 ? " after adjusting for the other predictors" : "";
+    if (model === "ordinal") {
+      if (!y.levels || y.levels.length < 3) throw userError("Ordinal regression needs an outcome with at least three ordered categories. Set its type to ordinal in Data & variables and check the order.");
+      const lv = y.levels.filter(l => rows.some(i => y.values[i] === l)), yy = rows.map(i => lv.indexOf(y.values[i]));
+      decision.push({ rule: "Model", detail: `"${lab(y)}" has ${lv.length} ordered categories (${lv.join(" < ")}) → ordinal logistic regression (proportional odds).` });
+      const minCat = Math.min(...lv.map((_, j) => yy.filter(v => v === j).length));
+      decision.push({ rule: "Category sizes", detail: `Smallest category has ${minCat} observations${minCat < 10 ? " → sparse; consider merging adjacent categories" : " → adequate"}`, ok: minCat >= 10 });
+      decision.push({ rule: "Events per parameter", detail: `${n} observations for ${k} parameter(s) → ${f(n / k, 1)} per parameter${n / k < 10 ? " (low)" : ""}`, ok: n / k >= 10 });
+      const vifs = vifRule(X, names, decision);
+      try { fit = S.ordinalLogit(X, yy, names, lv); } catch (e) { throw userError("The model could not be fitted. A predictor may perfectly separate the categories; merge sparse categories or remove a predictor."); }
+      decision.push({ rule: "Proportional odds", detail: "Assumed: each predictor has the same odds ratio at every cut-point. QuantAI does not test this; the exported Stata (brant) and R code check it. If it fails, use a generalized ordinal or multinomial model.", ok: null });
+      decision.push({ rule: "Model fitted", detail: "Ordinal logistic regression (proportional odds)", final: true });
+      method = "Ordinal logistic regression";
+      tables.push({ title: `Cumulative odds ratios (higher ${lab(y)} category)`, columns: ["Predictor", "OR", "95% CI", "p"], rows: fit.coefs.map(c => [c.name, f(c.exp), `${f(c.expLow)} to ${f(c.expHigh)}`, pCell(c.p)]), note: "OR > 1 means higher odds of being in a higher category. Wald confidence intervals." });
+      tables.push({ title: "Cut-points (thresholds)", columns: ["Cut-point", "Estimate", "SE"], rows: fit.thresholds.map(t => [t.name, f(t.coef, 3), f(t.se, 3)]) });
+      tables.push({ title: "Model fit", columns: ["n", "Log-likelihood", "LR χ²", "df", "p", "McFadden R²", "AIC"], rows: [[n, f(fit.ll), f(fit.lr), fit.lrDf, pCell(fit.lrP), f(fit.mcFadden, 3), f(fit.aic, 1)]] });
+      if (vifs) tables.push({ title: "Variance inflation factors", columns: ["Predictor", "VIF"], rows: vifs.map(v => [v.name, f(v.vif)]) });
+      const sig = fit.coefs.filter(c => c.p < alpha);
+      writeup = `Ordinal logistic regression (proportional odds) was used to model ${lab(y)} (${lv.join(" < ")}; n = ${n}). The model ${fit.lrP < alpha ? "fitted significantly better than the null model" : "did not fit significantly better than the null model"}, χ²(${fit.lrDf}) = ${f(fit.lr)}, ${pAPA(fit.lrP)}.` + (sig.length ? " " + sig.map(c => `${c.name} was associated with ${c.exp > 1 ? "higher" : "lower"} odds of a higher ${lab(y)} category${adj} (OR = ${f(c.exp)}, 95% CI [${f(c.expLow)}, ${f(c.expHigh)}], ${pAPA(c.p)})`).join("; ") + "." : " No predictor was significantly associated with the outcome.");
+      chart = { type: "forest", label: "OR", rows: fit.coefs.map(c => ({ name: c.name, est: c.exp, lo: c.expLow, hi: c.expHigh })) };
+    } else if (model === "multinomial") {
+      if (!y.levels || y.levels.length < 3) throw userError("Multinomial regression needs a categorical outcome with at least three categories.");
+      const lv = y.levels.filter(l => rows.some(i => y.values[i] === l)), yy = rows.map(i => lv.indexOf(y.values[i]));
+      decision.push({ rule: "Model", detail: `"${lab(y)}" has ${lv.length} unordered categories → multinomial logistic regression; ${lv[0]} is the reference outcome.` });
+      const counts = lv.map((_, j) => yy.filter(v => v === j).length), epv = Math.min(...counts) / (k + 1);
+      decision.push({ rule: "Events per variable", detail: `Smallest outcome category has ${Math.min(...counts)} cases for ${k + 1} parameters per equation → EPV = ${f(epv, 1)}${epv < 10 ? " (below 10: estimates may be unstable)" : " (adequate)"}`, ok: epv >= 10 });
+      const vifs = vifRule(X, names, decision);
+      try { fit = S.multinomialLogit(X, yy, names, lv); } catch (e) { throw userError("The model could not be fitted. A category may be too small or perfectly predicted; merge categories or remove a predictor."); }
+      decision.push({ rule: "Convergence", detail: fit.separation ? "Possible separation: some estimates are very large. Merge sparse categories." : "Converged; no separation detected.", ok: !fit.separation });
+      decision.push({ rule: "Model fitted", detail: "Multinomial logistic regression", final: true });
+      method = "Multinomial logistic regression";
+      fit.equations.forEach(eq => tables.push({ title: `${eq.level} vs ${fit.reference}: relative risk ratios`, columns: ["Predictor", "RRR", "95% CI", "p"], rows: eq.coefs.slice(1).map(c => [c.name, f(c.exp), `${f(c.expLow)} to ${f(c.expHigh)}`, pCell(c.p)]) }));
+      tables.push({ title: "Model fit", columns: ["n", "Log-likelihood", "LR χ²", "df", "p", "McFadden R²"], rows: [[n, f(fit.ll), f(fit.lr), fit.lrDf, pCell(fit.lrP), f(fit.mcFadden, 3)]] });
+      if (vifs) tables.push({ title: "Variance inflation factors", columns: ["Predictor", "VIF"], rows: vifs.map(v => [v.name, f(v.vif)]) });
+      const sig = fit.equations.flatMap(eq => eq.coefs.slice(1).filter(c => c.p < alpha).map(c => `${c.name} for ${eq.level} vs ${fit.reference} (RRR = ${f(c.exp)}, 95% CI [${f(c.expLow)}, ${f(c.expHigh)}], ${pAPA(c.p)})`));
+      writeup = `Multinomial logistic regression was used to model ${lab(y)} with ${fit.reference} as the reference category (n = ${n}), χ²(${fit.lrDf}) = ${f(fit.lr)}, ${pAPA(fit.lrP)}.` + (sig.length ? ` Significant associations${adj}: ${sig.join("; ")}.` : " No predictor was significantly associated with the outcome.");
+    } else {
+      if (!CONT.includes(y.type)) throw userError("The linear mixed model needs a continuous outcome.");
+      const yy = rows.map(i => Number(y.values[i])), gg = rows.map(i => cluster.values[i]);
+      const nG = new Set(gg).size;
+      decision.push({ rule: "Model", detail: `Continuous outcome with observations grouped by "${lab(cluster)}" (${nG} clusters) → linear mixed model with a random intercept for each cluster (REML).` });
+      decision.push({ rule: "Number of clusters", detail: `${nG} clusters${nG < 10 ? " → too few to estimate between-cluster variance reliably" : nG < 30 ? " → acceptable; variance estimates are imprecise below about 30" : " → adequate"}`, ok: nG >= 10 });
+      const vifs = vifRule(X, names, decision);
+      try { fit = S.mixedRandomIntercept(X, yy, gg, names); } catch (e) { throw userError("The model could not be fitted. Check that predictors vary and are not perfectly collinear."); }
+      decision.push({ rule: "Clustering (ICC)", detail: `Intraclass correlation = ${f(fit.icc, 3)}: ${f(100 * fit.icc, 1)}% of the variance lies between clusters${fit.boundary ? ". The between-cluster variance is estimated at zero, so the model reduces to ordinary regression" : fit.icc < 0.01 ? " → negligible clustering" : " → clustering matters; ordinary regression would understate standard errors"}`, ok: true });
+      decision.push({ rule: "Model fitted", detail: "Linear mixed model (random intercept, REML)", final: true });
+      method = "Linear mixed model (random intercept)";
+      tables.push({ title: "Fixed effects", columns: ["Predictor", "B", "SE", "95% CI", "p"], rows: fit.coefs.map(c => [c.name, f(c.coef), f(c.se), `${f(c.ciLow)} to ${f(c.ciHigh)}`, pCell(c.p)]), note: "Wald z-tests, as Stata mixed and statsmodels MixedLM report." });
+      tables.push({ title: "Variance components", columns: ["Component", "Variance", "SD"], rows: [[`Between ${lab(cluster)} (random intercept)`, f(fit.tau2, 3), f(Math.sqrt(fit.tau2), 3)], ["Residual (within cluster)", f(fit.sigma2, 3), f(Math.sqrt(fit.sigma2), 3)], ["Intraclass correlation (ICC)", f(fit.icc, 3), ""]] });
+      tables.push({ title: "Model information", columns: ["n", "Clusters", "Cluster size (min–max)", "REML log-likelihood"], rows: [[n, fit.nGroups, `${Math.min(...fit.groupSizes)}–${Math.max(...fit.groupSizes)}`, f(fit.reml)]] });
+      if (vifs) tables.push({ title: "Variance inflation factors", columns: ["Predictor", "VIF"], rows: vifs.map(v => [v.name, f(v.vif)]) });
+      const sig = fit.coefs.slice(1).filter(c => c.p < alpha);
+      writeup = `A linear mixed model with a random intercept for ${lab(cluster)} (${fit.nGroups} clusters, n = ${n}) was fitted for ${lab(y)} using REML. The intraclass correlation was ${noLead(f(fit.icc, 2))}.` + (sig.length ? " " + sig.map(c => `${c.name} was significantly associated with ${lab(y)}${adj} (B = ${f(c.coef)}, 95% CI [${f(c.ciLow)}, ${f(c.ciHigh)}], ${pAPA(c.p)})`).join("; ") + "." : " No predictor was significantly associated with the outcome.");
+    }
+    return { kind: "regression", model, title: `${lab(y)} ~ ${preds.map(lab).join(" + ")}${cluster ? ` | ${lab(cluster)}` : ""}`, method, decision, tables, writeup, warnings, n, chart,
+      spec: { kind: "regression", model, y: y.name, preds: preds.map(p => p.name), cluster: cluster ? cluster.name : null, robust: false, crude: false } };
+  }
+
+  /* ---------------- survival ---------------- */
+  function survival(ds, timeV, eventV, groupV, covs, opts) {
+    opts = opts || {}; const alpha = opts.alpha || 0.05; covs = covs || [];
+    if (!CONT.includes(timeV.type)) throw userError("The time variable must be numeric (for example days or months of follow-up).");
+    if (eventV.type !== "binary") throw userError("The event variable must be binary (event vs censored). Set its type to binary; the second category is the event.");
+    const used = [timeV, eventV, ...(groupV ? [groupV] : []), ...covs];
+    const rows = D.completeRows(ds, used).filter(i => Number(timeV.values[i]) >= 0);
+    if (rows.length < 5) throw userError("Too few complete rows for survival analysis.");
+    const time = rows.map(i => Number(timeV.values[i])), event = rows.map(i => eventV.values[i] === eventV.levels[1] ? 1 : 0);
+    const decision = [], tables = [], warnings = missingWarn(ds, rows, used);
+    const nEv = event.filter(Boolean).length;
+    decision.push({ rule: "Variables", detail: `Time = "${lab(timeV)}"; event = "${lab(eventV)}" = ${eventV.levels[1]} (${eventV.levels[0]} is treated as censored). ${nEv} events among ${rows.length} participants.` });
+    if (time.some(t => t === 0)) decision.push({ rule: "Zero times", detail: "Some follow-up times are 0; check they are correct.", ok: false });
+    const groups = groupV ? groupV.levels.filter(l => rows.some(i => groupV.values[i] === l)) : [null];
+    const kmRows = [], curves = [];
+    groups.forEach(g => {
+      const ix = rows.map((r, k) => k).filter(k => g === null || groupV.values[rows[k]] === g);
+      const km = S.kaplanMeier(ix.map(k => time[k]), ix.map(k => event[k]));
+      kmRows.push([g === null ? "All" : g, km.n, km.events, km.median === null ? "not reached" : f(km.median, 1), km.median === null ? "–" : `${km.medianLo === null ? "–" : f(km.medianLo, 1)} to ${km.medianHi === null ? "not reached" : f(km.medianHi, 1)}`]);
+      curves.push({ label: g === null ? "All" : g, points: km.table.map(r => [r.t, r.s]) });
+    });
+    tables.push({ title: "Kaplan–Meier summary", columns: [groupV ? lab(groupV) : "Group", "n", "Events", "Median survival", "95% CI"], rows: kmRows, note: "Greenwood standard errors with log(−log) confidence intervals." });
+    let method = "Kaplan–Meier", lr = null, writeup = `Of ${rows.length} participants, ${nEv} had the event.`;
+    if (groupV && groups.length >= 2) {
+      lr = S.logRank(rows.map((r, k) => time[k]), event, rows.map(i => groupV.values[i]));
+      decision.push({ rule: "Comparing curves", detail: `${groups.length} groups → log-rank test, χ²(${lr.df}) = ${f(lr.chi2)}, ${pAPA(lr.p)}`, ok: true });
+      tables.push({ title: "Log-rank test", columns: ["Group", "Observed", "Expected"], rows: groups.map(l => { const j = lr.levels.indexOf(l); return [l, lr.observed[j], f(lr.expected[j], 1)]; }), note: `χ²(${lr.df}) = ${f(lr.chi2)}, ${pAPA(lr.p)}` });
+      method = "Kaplan–Meier with log-rank test";
+      writeup += ` Survival ${lr.p < alpha ? "differed significantly" : "did not differ significantly"} between ${lab(groupV)} groups (log-rank χ²(${lr.df}) = ${f(lr.chi2)}, ${pAPA(lr.p)}).`;
+    }
+    const coxPreds = [...(groupV ? [groupV] : []), ...covs];
+    if (coxPreds.length) {
+      const { names, X, terms } = design(coxPreds, rows);
+      refRules(terms, decision);
+      const epv = nEv / names.length;
+      decision.push({ rule: "Events per variable (Cox)", detail: `${nEv} events for ${names.length} parameter(s) → EPV = ${f(epv, 1)}${epv < 10 ? " (below 10: hazard ratios may be unstable)" : " (adequate)"}`, ok: epv >= 10 });
+      let cox; try { cox = S.coxPH(X, time, event, names); } catch (e) { throw userError("The Cox model could not be fitted. A predictor may have no events in one category; merge categories or remove it."); }
+      if (cox.separation) warnings.push("The Cox model shows signs of separation (very large hazard ratios); a category may have no events.");
+      decision.push({ rule: "Proportional hazards", detail: "Assumed: hazard ratios are constant over time. QuantAI does not test this; the exported code runs the Schoenfeld-residual test (estat phtest in Stata, cox.zph in R). Crossing Kaplan–Meier curves are a warning sign.", ok: null });
+      decision.push({ rule: "Model fitted", detail: "Cox proportional hazards regression (Efron ties)", final: true });
+      method = coxPreds.length > 1 || covs.length ? "Cox proportional hazards regression" : method + " and Cox regression";
+      tables.push({ title: "Hazard ratios", columns: ["Predictor", "HR", "95% CI", "p"], rows: cox.coefs.map(c => [c.name, f(c.exp), `${f(c.expLow)} to ${f(c.expHigh)}`, pCell(c.p)]), note: `Efron method for ties. Likelihood-ratio χ²(${cox.lrDf}) = ${f(cox.lr)}, ${pAPA(cox.lrP)}.` });
+      const sig = cox.coefs.filter(c => c.p < alpha);
+      writeup += sig.length ? " In Cox regression, " + sig.map(c => `${c.name} was associated with a ${c.exp > 1 ? "higher" : "lower"} hazard of ${lab(eventV)}${coxPreds.length > 1 ? " after adjustment" : ""} (HR = ${f(c.exp)}, 95% CI [${f(c.expLow)}, ${f(c.expHigh)}], ${pAPA(c.p)})`).join("; ") + "." : " No predictor was significantly associated with the hazard in Cox regression.";
+    } else decision.push({ rule: "Method", detail: "No grouping variable or covariates → overall Kaplan–Meier estimate only.", final: true });
+    return { kind: "survival", title: `Survival: ${lab(timeV)}, event ${lab(eventV)}${groupV ? ` by ${lab(groupV)}` : ""}`, method, decision, tables, writeup, warnings, n: rows.length,
+      chart: { type: "km", curves, xlabel: lab(timeV) },
+      spec: { kind: "survival", time: timeV.name, event: eventV.name, group: groupV ? groupV.name : null, covs: covs.map(c => c.name) } };
+  }
+  Object.assign(A, { regressionExt, survival });
+})(typeof Analysis !== "undefined" ? Analysis : require("./analysis.js"));
+if (false) module.exports = require("./analysis.js");
+
+/* =====================================================================
    Code generator: turns analysis specs into runnable Stata, Python,
    R and SPSS scripts that read analysis_data.csv (the cleaned export),
    recode variables exactly as the app did, run the same assumption
@@ -1337,7 +1700,8 @@ const Codegen = (function () {
       else if (s.kind === "crosstab") { need(s.r, "cat"); need(s.c, "cat"); if (s.twoByTwo) { need(s.r, "bin"); need(s.c, "bin"); } }
       else if (s.kind === "mcnemar") { need(s.a, "bin"); need(s.b, "bin"); need(s.a, "cat"); need(s.b, "cat"); }
       else if (s.kind === "paired") { [s.a, s.b].forEach(n => { if (by(n).type === "ordinal") need(n, "num"); }); }
-      else if (s.kind === "regression") { const y = by(s.y); if (y.type === "binary") need(s.y, "bin"); s.preds.forEach(n => { if (CATT.includes(by(n).type)) need(n, "cat"); }); }
+      else if (s.kind === "regression") { const y = by(s.y); if (s.model === "ordinal" || s.model === "multinomial") need(s.y, "cat"); else if (y.type === "binary") need(s.y, "bin"); s.preds.forEach(n => { if (CATT.includes(by(n).type)) need(n, "cat"); }); }
+      else if (s.kind === "survival") { need(s.event, "bin"); if (s.group) need(s.group, "cat"); s.covs.forEach(n => { if (CATT.includes(by(n).type)) need(n, "cat"); }); }
       else if (s.kind === "table1") { if (s.group) need(s.group, "cat"); s.vars.forEach(x => { if (x.type === "cat") need(x.name, "cat"); }); }
     });
     return needs;
@@ -1595,7 +1959,73 @@ const Codegen = (function () {
     return o.join("\n");
   }
 
+  function spssDummies(preds, isCat) {
+    const dum = [], terms = [];
+    preds.forEach(v => { if (isCat(v)) v.levels.slice(1).forEach((l, i) => { const nm = `${v.name}_d${i + 2}`; dum.push(`COMPUTE ${nm} = (${catName(v)} = ${i + 2}).`); terms.push(nm); }); else terms.push(v.name); });
+    return { dum, terms };
+  }
+  function extRegressionSection(lang, ds, s) {
+    const y = by(ds, s.y), preds = s.preds.map(n => by(ds, n)), isCat = v => CATT.includes(v.type), o = [];
+    const pv = v => isCat(v) ? catName(v) : v.name, cl = s.cluster;
+    const vars = [s.model === "mixed" ? y.name : catName(y), ...preds.map(pv), ...(cl ? [cl] : [])];
+    if (lang === "stata") {
+      const rhs = preds.map(v => isCat(v) ? `i.${catName(v)}` : v.name).join(" ");
+      if (s.model === "ordinal") o.push(cmt(lang, "Ordinal logistic regression (proportional odds); or = cumulative odds ratios"), `ologit ${catName(y)} ${rhs}, or`, cmt(lang, "Proportional-odds check (Brant test): ssc install spost13_ado, then:"), `* brant, detail`);
+      if (s.model === "multinomial") o.push(cmt(lang, `Multinomial logistic regression; reference outcome = ${y.levels[0]}`), `mlogit ${catName(y)} ${rhs}, baseoutcome(1) rrr`);
+      if (s.model === "mixed") o.push(cmt(lang, "Linear mixed model with a random intercept per cluster (REML)"), `egen long _cl = group(${cl})`, `mixed ${y.name} ${rhs} || _cl:, reml`, `estat icc`, `drop _cl`);
+    } else if (lang === "python") {
+      o.push(`d = df[[${vars.map(qJ).join(", ")}]].dropna()`);
+      if (s.model === "mixed") {
+        const rhs = preds.map(v => isCat(v) ? `C(${catName(v)})` : v.name).join(" + ");
+        o.push(`# Random-intercept model (REML). statsmodels derives fixed-effect SEs from the joint Hessian; Stata, R (nlme) and QuantAI use (X'V^-1X)^-1, so SEs can differ in the 3rd-4th decimal.`,
+          `m = smf.mixedlm("${y.name} ~ ${rhs}", d, groups=d[${qJ(cl)}]).fit(reml=True)`, `print(m.summary())`, `tau2, s2 = float(m.cov_re.iloc[0, 0]), m.scale`, `print(f"ICC = {tau2/(tau2+s2):.3f}")`);
+      } else {
+        o.push(`X = pd.get_dummies(d[[${preds.map(v => qJ(pv(v))).join(", ")}]], drop_first=True).astype(float)  # first category = reference`);
+        if (s.model === "ordinal") o.push(`from statsmodels.miscmodels.ordinal_model import OrderedModel`, `m = OrderedModel(d[${qJ(catName(y))}].cat.as_ordered(), X, distr="logit").fit(method="bfgs", maxiter=5000, disp=False)`, `print(m.summary())`, `k = X.shape[1]`, `print(pd.DataFrame({"OR": np.exp(m.params[:k]), "2.5%": np.exp(m.conf_int().iloc[:k, 0]), "97.5%": np.exp(m.conf_int().iloc[:k, 1]), "p": m.pvalues[:k]}).round(4))`);
+        if (s.model === "multinomial") o.push(`m = sm.MNLogit(d[${qJ(catName(y))}].cat.codes, sm.add_constant(X)).fit(disp=0, maxiter=200)  # code 0 = ${y.levels[0]} (reference)`, `print(m.summary())`, `print(np.exp(m.params).round(4))  # relative risk ratios`);
+      }
+    } else if (lang === "r") {
+      o.push(`d <- na.omit(dat[, c(${vars.map(qJ).join(", ")})])`);
+      const rhs = preds.map(pv).join(" + ");
+      if (s.model === "ordinal") o.push(`library(MASS)  # ships with R`, `d$${catName(y)} <- factor(d$${catName(y)}, levels = levels(d$${catName(y)}), ordered = TRUE)`, `m <- polr(${catName(y)} ~ ${rhs}, data = d, Hess = TRUE)`, `summary(m)`,
+        `b <- coef(m); se <- sqrt(diag(vcov(m)))[names(b)]`, `round(cbind(OR = exp(b), lo = exp(b - 1.959964*se), hi = exp(b + 1.959964*se), p = 2*pnorm(-abs(b/se))), 4)`, `# Proportional-odds check: install.packages("brant"); brant::brant(m)`);
+      if (s.model === "multinomial") o.push(`library(nnet)  # ships with R`, `m <- multinom(${catName(y)} ~ ${rhs}, data = d, trace = FALSE)  # reference = ${y.levels[0]}`, `sm <- summary(m); z <- sm$coefficients / sm$standard.errors`, `round(exp(coef(m)), 4)  # relative risk ratios`, `round(2 * pnorm(-abs(z)), 4)  # p-values`);
+      if (s.model === "mixed") o.push(`library(nlme)  # ships with R`, `m <- lme(${y.name} ~ ${rhs}, random = ~ 1 | ${cl}, data = d, method = "REML")`, `summary(m)  # nlme reports t-tests; QuantAI and Stata report z-tests (same estimates and SEs)`, `vc <- as.numeric(VarCorr(m)[, "Variance"]); cat("ICC =", round(vc[1] / sum(vc), 3), "\\n")`);
+    } else {
+      const { dum, terms } = spssDummies(preds, isCat);
+      if (dum.length) o.push(cmt(lang, "Indicator variables (reference = code 1)"), ...dum, "EXECUTE.");
+      if (s.model === "ordinal") o.push(`PLUM ${catName(y)} WITH ${terms.join(" ")} /LINK=LOGIT /PRINT=PARAMETER SUMMARY TPARALLEL.`, cmt(lang, "Exponentiate the location estimates for odds ratios; TPARALLEL tests proportional odds"));
+      if (s.model === "multinomial") o.push(`NOMREG ${catName(y)} (BASE=FIRST ORDER=ASCENDING) WITH ${terms.join(" ")} /PRINT=PARAMETER SUMMARY LRT FIT.`);
+      if (s.model === "mixed") o.push(`MIXED ${y.name} WITH ${terms.join(" ")} /FIXED=${terms.join(" ")} /RANDOM=INTERCEPT | SUBJECT(${cl}) COVTYPE(VC) /METHOD=REML /PRINT=SOLUTION TESTCOV.`);
+    }
+    return o.join("\n");
+  }
+  function survivalSection(lang, ds, s) {
+    const ev = by(ds, s.event), g = s.group ? by(ds, s.group) : null, covs = s.covs.map(n => by(ds, n)), isCat = v => CATT.includes(v.type), o = [];
+    const preds = [...(g ? [g] : []), ...covs], pv = v => isCat(v) ? catName(v) : v.name, en = binName(ev);
+    const vars = [s.time, en, ...preds.map(pv)];
+    if (lang === "stata") {
+      o.push(cmt(lang, `Event = ${ev.levels[1]}; ${ev.levels[0]} = censored`), `stset ${s.time}, failure(${en})`, g ? `sts list, by(${catName(g)}) at(0) compare` : `sts list`, g ? `stci, by(${catName(g)})   // median survival` : `stci`);
+      if (g) o.push(`sts test ${catName(g)}   // log-rank`, `sts graph, by(${catName(g)})`); else o.push(`sts graph`);
+      if (preds.length) o.push(cmt(lang, "Cox regression with Efron ties, as QuantAI (Stata's default is Breslow)"), `stcox ${preds.map(v => isCat(v) ? `i.${catName(v)}` : v.name).join(" ")}, efron`, `estat phtest, detail   // proportional-hazards check`);
+    } else if (lang === "python") {
+      o.push(`from statsmodels.duration.survfunc import SurvfuncRight, survdiff`, `d = df[[${vars.map(qJ).join(", ")}]].dropna()`);
+      if (g) o.push(`for lvl, sub in d.groupby(${qJ(catName(g))}, observed=True):`, `    sf = SurvfuncRight(sub[${qJ(s.time)}], sub[${qJ(en)}])`, `    print(lvl, "n =", len(sub), "events =", int(sub[${qJ(en)}].sum()), "median =", sf.quantile(0.5))`,
+        `stat, p = survdiff(d[${qJ(s.time)}], d[${qJ(en)}], d[${qJ(catName(g))}].astype(str))`, `print(f"Log-rank chi2 = {stat:.2f}, {p_fmt(p)}")`);
+      else o.push(`sf = SurvfuncRight(d[${qJ(s.time)}], d[${qJ(en)}]); print(sf.summary().head(20)); print("median =", sf.quantile(0.5))`);
+      if (preds.length) o.push(`m = sm.PHReg.from_formula("${s.time} ~ ${preds.map(v => isCat(v) ? `C(${catName(v)})` : v.name).join(" + ")}", d, status=d[${qJ(en)}].to_numpy(), ties="efron").fit()`, `print(m.summary())`, `print(np.exp(m.params).round(4))  # hazard ratios`);
+    } else if (lang === "r") {
+      o.push(`library(survival)  # ships with R`, `d <- na.omit(dat[, c(${vars.map(qJ).join(", ")})])`, `km <- survfit(Surv(${s.time}, ${en}) ~ ${g ? catName(g) : "1"}, data = d, conf.type = "log-log"); print(km)`, `plot(km, col = 1:6, xlab = "${s.time}", ylab = "Survival probability")`);
+      if (g) o.push(`survdiff(Surv(${s.time}, ${en}) ~ ${catName(g)}, data = d)  # log-rank`);
+      if (preds.length) o.push(`m <- coxph(Surv(${s.time}, ${en}) ~ ${preds.map(pv).join(" + ")}, data = d, ties = "efron")`, `summary(m)`, `cox.zph(m)  # proportional-hazards check`);
+    } else {
+      o.push(cmt(lang, `Event = ${ev.levels[1]} (coded 1)`), g ? `KM ${s.time} BY ${catName(g)} /STATUS=${en}(1) /PRINT=TABLE MEAN /PLOT=SURVIVAL /TEST=LOGRANK /COMPARE=OVERALL POOLED.` : `KM ${s.time} /STATUS=${en}(1) /PRINT=TABLE MEAN /PLOT=SURVIVAL.`);
+      if (preds.length) { const cats = preds.filter(isCat); o.push(cmt(lang, "SPSS uses Breslow ties, so results can differ slightly from QuantAI's Efron method"), `COXREG ${s.time} /STATUS=${en}(1) /METHOD=ENTER ${preds.map(pv).join(" ")}${cats.length ? ` /CATEGORICAL=${cats.map(catName).join(" ")} ${cats.map(v => `/CONTRAST (${catName(v)})=Indicator(1)`).join(" ")}` : ""} /PRINT=CI(95).`); }
+    }
+    return o.join("\n");
+  }
   function regressionSection(lang, ds, s) {
+    if (["ordinal", "multinomial", "mixed"].includes(s.model)) return extRegressionSection(lang, ds, s);
     const y = by(ds, s.y), preds = s.preds.map(n => by(ds, n));
     const yv = s.model === "logistic" || s.model === "modpoisson" ? binName(y) : y.name;
     const isCat = v => CATT.includes(v.type);
@@ -1729,7 +2159,8 @@ const Codegen = (function () {
   function section(lang, ds, spec, i, title) {
     const body = spec.kind === "compare" ? compareSection(lang, ds, spec) : spec.kind === "correlate" ? correlateSection(lang, ds, spec)
       : spec.kind === "crosstab" ? crosstabSection(lang, ds, spec) : spec.kind === "mcnemar" || spec.kind === "paired" ? pairedSection(lang, ds, spec)
-      : spec.kind === "regression" ? regressionSection(lang, ds, spec) : spec.kind === "table1" ? table1Section(lang, ds, spec) : "";
+      : spec.kind === "regression" ? regressionSection(lang, ds, spec) : spec.kind === "table1" ? table1Section(lang, ds, spec)
+      : spec.kind === "survival" ? survivalSection(lang, ds, spec) : "";
     return banner(lang, i, title) + "\n" + body + "\n";
   }
 
@@ -2120,7 +2551,7 @@ const Method = (function () {
 })();
 if (false) module.exports = Method;
 
-const EXAMPLE_CSV = "Participant ID,Age (years),Sex,District,Residence,Education level,Salt intake,BMI,Systolic BP,Systolic BP 3 months,Hypertension,Smoker,Clinic visits (12m),Aware of status (baseline),Aware of status (3 months)\nGH-0001,55,Female,Tamale,Rural,Primary,High,17.2,152,149,Yes,No,4,No,Yes\nGH-0002,36,Female,Kumasi,Urban,Primary,Low,20.7,124,114,No,No,2,Yes,Yes\nGH-0003,38,Male,Kumasi,Urban,Secondary,Moderate,49.0,145,143,Yes,No,2,Yes,No\nGH-0004,55,Male,Accra,Rural,Secondary,Moderate,25.1,121,113,No,No,5,Yes,Yes\nGH-0005,53,Female,Accra,Urban,Secondary,Moderate,24.0,115,,No,No,1,No,Yes\nGH-0006,43,Female,Ho,Rural,Primary,High,12.2,115,109,No,No,1,No,No\nGH-0007,62,Female,Cape Coast,Urban,None,High,15.6,113,101,No,No,3,No,No\nGH-0008,45,Female,Tamale,Rural,Primary,Moderate,34.0,143,156,Yes,No,1,Yes,Yes\nGH-0009,21,Male,Kumasi,Urban,Primary,Moderate,42.4,134,134,No,No,0,No,No\nGH-0010,36,Male,Accra,Urban,None,High,26.0,110,106,No,No,0,No,Yes\nGH-0011,27,Male,Cape Coast,Rural,None,Low,19.1,107,105,No,No,0,Yes,Yes\nGH-0012,61,Female,Cape Coast,Rural,Secondary,High,20.7,144,,Yes,No,0,No,No\nGH-0013,53,Female,Kumasi,Urban,Primary,Moderate,21.2,141,127,Yes,No,1,No,Yes\nGH-0014,48,Male,Ho,Urban,Tertiary,Low,25.8,131,127,No,No,5,Yes,Yes\nGH-0015,18,Female,Kumasi,Urban,Secondary,Moderate,27.7,121,113,No,No,0,No,No\nGH-0016,27,Female,Ho,Urban,None,Moderate,46.1,138,131,No,No,2,No,No\nGH-0017,44,Male,Accra,Urban,Secondary,High,25.1,125,113,No,Yes,3,Yes,Yes\nGH-0018,23,Female,Accra,Rural,None,Low,17.6,106,96,No,No,0,Yes,Yes\nGH-0019,58,Female,Accra,Urban,Primary,Moderate,23.1,132,115,No,No,3,No,No\nGH-0020,45,Female,Tamale,Rural,Primary,High,33.9,129,116,No,No,1,No,No\nGH-0021,44,Male,Kumasi,Urban,None,High,22.1,132,134,No,No,3,Yes,Yes\nGH-0022,45,Female,Accra,Rural,Tertiary,Moderate,12.3,113,107,No,No,1,No,No\nGH-0023,34,Male,Kumasi,Urban,Primary,High,13.4,120,108,No,No,1,No,No\nGH-0024,32,Female,Tamale,Rural,Secondary,Low,21.5,112,107,No,No,2,No,No\nGH-0025,21,Female,Accra,Urban,Primary,Moderate,20.3,108,129,No,No,0,No,No\nGH-0026,46,Female,Accra,Urban,Secondary,Low,30.1,104,84,No,No,4,Yes,Yes\nGH-0027,51,Male,Tamale,Urban,Tertiary,Low,30.4,164,156,Yes,Yes,0,Yes,Yes\nGH-0028,43,Female,Kumasi,Urban,None,High,44.8,155,149,Yes,No,1,No,No\nGH-0029,42,Male,Accra,Urban,Primary,High,21.8,133,126,No,No,3,No,No\nGH-0030,34,Male,Accra,Urban,Secondary,Moderate,25.8,146,150,Yes,No,0,Yes,Yes\nGH-0031,49,Male,Tamale,Urban,None,Moderate,36.5,154,150,Yes,No,4,Yes,Yes\nGH-0032,18,Female,Cape Coast,Rural,Secondary,High,19.7,115,114,No,No,0,Yes,Yes\nGH-0033,32,Female,Ho,Rural,Tertiary,Moderate,19.0,121,125,No,No,3,Yes,Yes\nGH-0034,37,Male,Kumasi,Urban,Secondary,Moderate,16.8,138,133,No,No,1,No,Yes\nGH-0035,39,Female,Accra,Rural,Secondary,Low,34.3,131,124,No,No,2,No,No\nGH-0036,49,Female,Cape Coast,Rural,Primary,Moderate,28.7,113,,No,No,1,No,No\nGH-0037,43,Male,Kumasi,Rural,None,Low,20.3,101,95,No,Yes,3,Yes,Yes\nGH-0038,48,Male,Accra,Rural,Tertiary,Moderate,15.8,139,136,No,No,2,No,No\nGH-0039,62,Female,Cape Coast,Rural,Secondary,Low,34.1,138,129,No,No,1,No,No\nGH-0040,64,Female,Accra,Rural,Secondary,Moderate,37.6,154,141,Yes,No,6,No,No\nGH-0041,54,Male,Ho,Rural,Primary,Moderate,18.7,126,113,No,No,2,No,Yes\nGH-0042,62,Male,Accra,Rural,None,High,19.1,142,140,Yes,No,2,No,No\nGH-0043,68,Male,Accra,Rural,Secondary,High,36.8,144,139,Yes,No,2,No,No\nGH-0044,51,Female,Ho,Urban,Secondary,Low,19.2,127,126,No,No,2,Yes,Yes\nGH-0045,28,Female,Tamale,Urban,None,High,21.8,87,64,No,No,0,No,Yes\nGH-0046,59,Female,Kumasi,Rural,Primary,High,15.0,124,111,No,No,0,No,No\nGH-0047,33,Female,Kumasi,Urban,Secondary,Moderate,25.0,101,86,No,Yes,0,No,No\nGH-0048,70,Male,Tamale,Rural,None,Moderate,36.5,152,157,Yes,No,0,No,Yes\nGH-0049,68,Female,Ho,Rural,Primary,Low,40.3,150,143,Yes,No,4,No,Yes\nGH-0050,39,Female,Kumasi,Urban,Primary,Low,38.4,129,112,No,No,1,No,No\nGH-0051,32,Female,Kumasi,Urban,Secondary,Moderate,32.0,126,133,No,No,0,Yes,Yes\nGH-0052,37,Male,Accra,Urban,Primary,Moderate,39.2,114,111,No,Yes,1,No,No\nGH-0053,45,Female,Accra,Rural,Secondary,Low,19.9,104,117,No,No,0,No,No\nGH-0054,63,Male,Kumasi,Urban,Primary,High,39.4,152,121,Yes,Yes,6,Yes,Yes\nGH-0055,30,Female,Kumasi,Rural,Primary,High,16.4,117,111,No,No,1,Yes,Yes\nGH-0056,57,Male,Kumasi,Urban,None,Moderate,26.0,139,139,No,No,3,Yes,Yes\nGH-0057,19,Male,Kumasi,Rural,Primary,High,29.6,99,87,No,Yes,3,No,Yes\nGH-0058,62,Male,Accra,Urban,Tertiary,Moderate,31.7,160,159,Yes,No,10,No,No\nGH-0059,45,Female,Tamale,Rural,Secondary,Low,19.9,116,106,No,No,0,Yes,Yes\nGH-0060,49,Male,Ho,Urban,Secondary,Moderate,28.7,154,154,Yes,No,4,No,No\nGH-0061,45,Female,Kumasi,Urban,Secondary,Low,40.3,145,131,Yes,No,2,No,No\nGH-0062,58,Female,Accra,Rural,None,Moderate,,152,154,Yes,No,2,No,No\nGH-0063,51,Female,Kumasi,Urban,Secondary,High,39.3,151,145,Yes,No,4,No,No\nGH-0064,68,Female,Tamale,Urban,Secondary,Low,16.3,121,126,No,No,2,No,No\nGH-0065,23,Female,Cape Coast,Rural,Secondary,Low,,96,90,No,No,2,No,No\nGH-0066,34,Male,Cape Coast,Rural,Tertiary,Low,15.8,122,119,No,No,0,No,Yes\nGH-0067,29,Female,Tamale,Urban,None,Low,20.2,104,111,No,No,2,Yes,Yes\nGH-0068,55,Female,Accra,Rural,None,Low,30.8,108,88,No,No,3,No,Yes\nGH-0069,24,Male,Ho,Rural,Tertiary,,29.1,123,121,No,No,1,No,Yes\nGH-0070,78,Female,Accra,Rural,Primary,Low,9.3,129,125,No,No,2,No,No\nGH-0071,47,Male,Kumasi,Urban,Tertiary,Moderate,30.3,139,126,No,No,4,Yes,Yes\nGH-0072,62,Female,Accra,Urban,Primary,Low,32.2,147,151,Yes,No,1,No,No\nGH-0073,33,Male,Ho,Rural,Primary,Moderate,25.8,148,153,Yes,Yes,1,No,No\nGH-0074,49,Male,Cape Coast,Rural,Secondary,Moderate,24.0,110,112,No,No,1,Yes,Yes\nGH-0075,54,Male,Cape Coast,Rural,Primary,High,15.5,150,136,Yes,No,4,No,No\nGH-0076,37,Male,Kumasi,Urban,None,Moderate,29.2,136,,No,No,0,Yes,Yes\nGH-0077,43,Male,Tamale,Urban,Primary,Moderate,20.4,122,94,No,No,4,Yes,Yes\nGH-0078,66,Female,Cape Coast,Urban,Primary,Moderate,38.1,130,124,No,No,0,Yes,Yes\nGH-0079,62,Female,Tamale,Urban,Tertiary,Low,23.5,131,123,No,No,3,No,No\nGH-0080,54,Female,Accra,Urban,Tertiary,Low,28.3,138,129,No,No,2,No,Yes\nGH-0081,72,Male,Accra,Urban,None,Low,26.0,140,141,Yes,No,0,No,No\nGH-0082,21,Female,Kumasi,Urban,Primary,Low,23.9,102,98,No,No,0,No,No\nGH-0083,50,Male,Kumasi,Urban,Secondary,,31.0,128,129,No,No,1,No,No\nGH-0084,41,Female,Tamale,Rural,None,Moderate,35.6,122,118,No,No,0,Yes,Yes\nGH-0085,65,Female,Tamale,Urban,None,High,16.9,140,138,Yes,No,5,No,No\nGH-0086,60,Female,Kumasi,Urban,None,Low,30.1,142,125,Yes,No,3,No,No\nGH-0087,61,Female,Kumasi,Urban,Tertiary,Moderate,41.3,160,154,Yes,No,0,No,No\nGH-0088,38,Female,Kumasi,Urban,Primary,Moderate,16.8,103,98,No,No,0,No,No\nGH-0089,53,Female,Kumasi,Urban,None,High,,148,145,Yes,No,5,No,No\nGH-0090,60,Male,Cape Coast,Rural,Primary,High,21.7,169,171,Yes,No,1,No,No\nGH-0091,63,Female,Cape Coast,Urban,None,Moderate,26.4,137,,No,No,0,No,No\nGH-0092,34,Female,Tamale,Urban,Secondary,Moderate,21.2,130,128,No,No,5,No,No\nGH-0093,37,Male,Cape Coast,Rural,Primary,High,21.5,106,91,No,No,0,No,No\nGH-0094,49,Female,Ho,Urban,Secondary,Low,21.5,152,143,Yes,No,5,No,No\nGH-0095,64,Female,Kumasi,Urban,Tertiary,Moderate,39.7,156,157,Yes,No,4,Yes,Yes\nGH-0096,54,Male,Kumasi,Rural,Secondary,High,33.3,159,162,Yes,No,2,No,No\nGH-0097,64,Female,Kumasi,Rural,Primary,High,25.1,142,140,Yes,No,2,Yes,Yes\nGH-0098,21,Male,Cape Coast,Rural,None,Low,26.3,92,78,No,No,2,No,No\nGH-0099,42,Female,Tamale,Rural,Primary,Moderate,20.2,125,112,No,No,1,No,No\nGH-0100,52,Female,Kumasi,Urban,Primary,Moderate,35.6,138,137,No,No,2,No,No\nGH-0101,50,Male,Ho,Rural,Primary,Low,18.7,134,135,No,No,0,Yes,No\nGH-0102,21,Male,Tamale,Rural,None,High,29.7,111,102,No,Yes,2,No,No\nGH-0103,60,Male,Kumasi,Rural,Secondary,Moderate,,101,104,No,Yes,3,No,No\nGH-0104,50,Male,Accra,Urban,Secondary,Moderate,32.3,136,134,No,Yes,2,No,No\nGH-0105,40,Female,Ho,Urban,Secondary,Moderate,19.7,113,94,No,No,1,No,No\nGH-0106,62,Male,Tamale,Rural,Primary,Low,27.2,146,147,Yes,Yes,2,Yes,Yes\nGH-0107,24,Male,Kumasi,Urban,Primary,High,16.2,100,95,No,No,2,No,No\nGH-0108,39,Male,Cape Coast,Rural,Secondary,High,28.9,126,122,No,No,1,No,No\nGH-0109,57,Female,Kumasi,Rural,Primary,Low,24.7,123,111,No,No,1,Yes,Yes\nGH-0110,51,Male,Accra,Urban,Primary,Moderate,16.2,113,107,No,No,1,No,Yes\nGH-0111,43,Male,Kumasi,Urban,Tertiary,Low,32.3,138,146,No,Yes,0,No,Yes\nGH-0112,44,Male,Accra,Urban,Tertiary,Low,24.5,120,125,No,No,1,Yes,No\nGH-0113,43,Female,Kumasi,Rural,Secondary,Low,28.0,117,108,No,No,0,Yes,Yes\nGH-0114,57,Male,Tamale,Rural,Tertiary,High,23.3,127,123,No,No,0,No,No\nGH-0115,42,Male,Accra,Urban,Secondary,High,20.5,121,121,No,No,4,Yes,Yes\nGH-0116,55,Female,Tamale,Urban,Primary,Moderate,29.6,154,162,Yes,No,1,No,Yes\nGH-0117,19,Female,Tamale,Urban,Secondary,Low,16.3,97,90,No,No,0,Yes,Yes\nGH-0118,62,Female,Kumasi,Urban,,Low,29.5,127,127,No,No,0,Yes,Yes\nGH-0119,78,Male,Tamale,Rural,None,Low,16.9,137,127,No,No,1,No,Yes\nGH-0120,52,Male,Kumasi,Rural,Tertiary,High,28.2,148,141,Yes,No,4,No,No\nGH-0121,45,Male,Kumasi,Urban,Tertiary,Moderate,20.2,123,127,No,No,1,No,Yes\nGH-0122,39,Male,Cape Coast,Rural,Primary,Low,28.3,130,137,No,No,0,No,Yes\nGH-0123,55,Male,Accra,Rural,Primary,High,32.8,152,153,Yes,Yes,1,No,Yes\nGH-0124,38,Female,Accra,Urban,Primary,High,16.8,127,120,No,No,3,Yes,Yes\nGH-0125,35,Male,Accra,Urban,Secondary,Moderate,15.5,116,106,No,Yes,0,No,No\nGH-0126,18,Female,Tamale,Rural,Primary,Moderate,29.3,96,109,No,No,2,No,Yes\nGH-0127,49,Female,Kumasi,Urban,None,Low,25.5,123,107,No,No,1,No,No\nGH-0128,42,Female,Ho,Urban,Tertiary,Moderate,20.5,110,104,No,No,2,No,No\nGH-0129,43,Female,Kumasi,Urban,Secondary,Low,28.6,134,133,No,No,0,No,No\nGH-0130,46,Male,Kumasi,Urban,Tertiary,Low,21.1,139,152,No,No,1,No,No\nGH-0131,37,Male,Cape Coast,Urban,Secondary,High,17.9,115,120,No,No,3,Yes,Yes\nGH-0132,48,Female,Ho,Rural,Primary,Low,11.6,121,107,No,No,4,No,Yes\nGH-0133,32,Female,Ho,Rural,Secondary,Low,34.9,129,124,No,No,0,No,Yes\nGH-0134,44,Male,Cape Coast,Urban,Primary,Low,38.2,133,128,No,No,1,Yes,Yes\nGH-0135,42,Male,Tamale,Rural,Tertiary,Low,35.1,151,150,Yes,No,2,No,No\nGH-0136,24,Male,Kumasi,Urban,Primary,Low,34.7,116,116,No,No,1,No,Yes\nGH-0137,30,Male,Ho,Rural,Primary,High,23.0,112,111,No,No,3,No,Yes\nGH-0138,38,Female,Cape Coast,Rural,Secondary,High,43.9,130,118,No,Yes,0,No,No\nGH-0139,39,Female,Accra,Rural,Primary,High,20.4,134,122,No,No,1,Yes,Yes\nGH-0140,49,Female,Ho,Rural,Primary,Moderate,33.5,125,115,No,No,1,No,No\nGH-0141,41,Male,Kumasi,Urban,Primary,High,32.3,125,123,No,Yes,5,Yes,Yes\nGH-0142,45,Female,Accra,Urban,None,High,24.8,142,134,Yes,No,0,Yes,Yes\nGH-0143,41,Female,Tamale,Urban,Secondary,Moderate,43.4,143,125,Yes,No,0,No,Yes\nGH-0144,18,Male,Accra,Urban,Secondary,,,123,111,No,No,0,No,Yes\nGH-0145,44,Female,Cape Coast,Urban,Primary,Moderate,32.5,120,104,No,No,0,Yes,Yes\nGH-0146,35,Female,Tamale,Rural,Primary,Low,25.8,120,128,No,No,0,No,No\nGH-0147,44,Male,Tamale,Urban,None,High,21.5,113,126,No,Yes,2,No,No\nGH-0148,36,Male,Accra,Urban,Primary,Moderate,22.8,123,112,No,Yes,2,No,Yes\nGH-0149,55,Male,Tamale,Rural,,Moderate,14.4,125,122,No,Yes,1,Yes,Yes\nGH-0150,45,Male,Accra,Urban,Primary,Moderate,13.7,116,,No,No,2,Yes,Yes\nGH-0151,55,Male,Cape Coast,Rural,None,Moderate,18.1,129,118,No,No,2,No,Yes\nGH-0152,56,Male,Accra,Urban,None,Low,35.2,148,134,Yes,No,1,No,No\nGH-0153,39,Male,Kumasi,Urban,Primary,Moderate,20.7,97,90,No,Yes,1,Yes,Yes\nGH-0154,57,Male,Tamale,Rural,Primary,Low,30.0,122,116,No,No,1,No,No\nGH-0155,49,Female,Kumasi,Urban,Primary,Moderate,17.7,129,138,No,No,1,Yes,Yes\nGH-0156,32,Female,Tamale,Rural,Secondary,Low,25.6,113,,No,No,0,No,No\nGH-0157,44,Female,Ho,Urban,Primary,Low,43.1,149,,Yes,No,1,No,Yes\nGH-0158,47,Female,Accra,Urban,Primary,Low,21.1,141,113,Yes,No,7,No,No\nGH-0159,63,Female,Tamale,Rural,Primary,Low,15.4,143,138,Yes,No,2,Yes,Yes\nGH-0160,41,Male,Ho,Rural,Secondary,Moderate,31.2,144,138,Yes,Yes,1,Yes,No\nGH-0161,66,Male,Kumasi,Rural,None,High,30.7,149,138,Yes,No,2,No,No\nGH-0162,56,Female,Accra,Urban,Secondary,Low,,159,165,Yes,No,2,No,No\nGH-0163,19,Female,Accra,Rural,Secondary,Moderate,30.2,107,108,No,No,3,No,No\nGH-0164,33,Male,Ho,Rural,Primary,High,24.3,126,115,No,No,1,No,No\nGH-0165,54,Female,Accra,Rural,None,Moderate,19.9,122,115,No,No,0,No,No\nGH-0166,27,Male,Tamale,Rural,Secondary,Moderate,35.5,121,121,No,No,0,Yes,Yes\nGH-0167,52,Female,Cape Coast,Rural,Secondary,Moderate,7.4,103,,No,No,2,Yes,Yes\nGH-0168,64,Male,Tamale,Urban,Secondary,Moderate,12.5,132,139,No,No,2,No,No\nGH-0169,43,Female,Tamale,Rural,None,High,27.0,109,108,No,No,2,Yes,Yes\nGH-0170,64,Female,Kumasi,Urban,Secondary,Low,36.1,117,103,No,Yes,2,No,No\nGH-0171,63,Female,Tamale,Urban,Primary,Low,24.4,144,145,Yes,No,10,Yes,Yes\nGH-0172,45,Male,Accra,Urban,None,High,27.7,139,141,No,Yes,0,No,No\nGH-0173,46,Male,Kumasi,Urban,Secondary,Moderate,28.6,142,142,Yes,Yes,1,No,Yes\nGH-0174,48,Female,Cape Coast,Rural,Secondary,Moderate,37.3,136,142,No,No,1,Yes,Yes\nGH-0175,52,Female,Cape Coast,Urban,Secondary,High,34.0,146,136,Yes,No,0,Yes,Yes\nGH-0176,26,Female,Tamale,Rural,Primary,High,29.3,115,125,No,No,3,No,No\nGH-0177,44,Male,Cape Coast,Urban,Primary,High,19.7,119,123,No,No,0,No,Yes\nGH-0178,24,Female,Tamale,Urban,Primary,Low,34.6,105,98,No,No,0,Yes,No\nGH-0179,42,Male,Ho,Urban,Primary,Moderate,33.8,157,171,Yes,No,0,No,No\nGH-0180,43,Female,Accra,Urban,Primary,High,26.7,116,98,No,No,2,No,Yes\nGH-0181,22,Female,Ho,Rural,None,Moderate,32.8,139,123,No,No,2,Yes,Yes\nGH-0182,30,Male,Ho,Rural,Tertiary,Moderate,16.2,96,91,No,No,1,No,No\nGH-0183,41,Female,Cape Coast,Rural,Secondary,High,,116,100,No,No,0,No,Yes\nGH-0184,74,Female,Cape Coast,Rural,Secondary,Moderate,33.1,163,156,Yes,No,4,No,No\nGH-0185,28,Male,Accra,Urban,Primary,Low,,127,117,No,Yes,0,Yes,Yes\nGH-0186,48,Female,Kumasi,Rural,Primary,Moderate,39.4,144,129,Yes,No,1,No,No\nGH-0187,34,Male,Ho,Rural,Secondary,High,18.0,107,82,No,No,2,No,No\nGH-0188,41,Female,Tamale,Rural,Tertiary,Moderate,23.1,133,126,No,No,3,Yes,Yes\nGH-0189,59,Male,Kumasi,Urban,Secondary,Moderate,37.4,135,109,No,No,1,No,No\nGH-0190,50,Male,Accra,Urban,None,Moderate,31.4,140,125,Yes,No,4,No,No\nGH-0191,52,Male,Tamale,Urban,Secondary,Low,19.2,114,95,No,No,2,No,No\nGH-0192,52,Female,Kumasi,Urban,Primary,Moderate,22.0,146,141,Yes,No,0,No,No\nGH-0193,53,Male,Kumasi,Rural,None,Moderate,8.8,122,114,No,No,8,No,No\nGH-0194,18,Male,Kumasi,Urban,,High,24.3,133,108,No,No,3,No,Yes\nGH-0195,51,Male,Kumasi,Rural,Tertiary,Moderate,39.9,142,143,Yes,No,2,No,No\nGH-0196,45,Male,Kumasi,Urban,Primary,High,34.9,131,137,No,No,0,No,No\nGH-0197,51,Female,Cape Coast,Urban,Secondary,Low,13.1,97,71,No,No,0,No,Yes\nGH-0198,57,Male,Tamale,Rural,Primary,Low,22.0,132,146,No,No,2,No,No\nGH-0199,51,Female,Accra,Urban,None,High,17.1,139,126,No,No,2,No,No\nGH-0200,55,Female,Accra,Urban,Secondary,Moderate,38.1,149,151,Yes,No,2,Yes,Yes\nGH-0201,31,Male,Ho,Urban,Primary,High,19.4,109,106,No,Yes,1,Yes,Yes\nGH-0202,52,Male,Kumasi,Rural,None,Moderate,52.3,150,,Yes,No,2,No,No\nGH-0203,45,Male,Tamale,Urban,Secondary,Low,16.0,111,108,No,No,6,No,Yes\nGH-0204,45,Female,Ho,Urban,Secondary,Moderate,18.5,118,126,No,No,4,No,No\nGH-0205,63,Male,Ho,Urban,Primary,Low,18.8,138,134,No,No,1,No,Yes\nGH-0206,40,Male,Ho,Rural,None,Low,29.4,128,120,No,No,0,Yes,Yes\nGH-0207,37,Female,Tamale,Urban,Secondary,Moderate,32.6,136,145,No,No,0,No,Yes\nGH-0208,29,Male,Tamale,Rural,Secondary,High,14.8,119,106,No,Yes,1,Yes,No\nGH-0209,42,Male,Cape Coast,Urban,None,Moderate,39.0,125,112,No,No,0,No,Yes\nGH-0210,60,Female,Cape Coast,Urban,Secondary,Moderate,26.8,135,150,No,No,0,No,Yes\nGH-0211,24,Female,Tamale,Urban,Primary,Moderate,28.8,103,103,No,Yes,3,Yes,Yes\nGH-0212,49,Male,Kumasi,Urban,Secondary,High,27.3,136,139,No,No,3,No,No\nGH-0213,18,Male,Accra,Urban,Tertiary,High,,112,75,No,No,1,No,No\nGH-0214,37,Male,Accra,Rural,None,Moderate,23.0,111,107,No,No,0,No,No\nGH-0215,52,Male,Tamale,Rural,Primary,Moderate,9.7,100,109,No,No,1,Yes,Yes\nGH-0216,39,Male,Accra,Rural,Secondary,Low,26.9,126,120,No,No,0,No,No\nGH-0217,30,Male,Accra,Urban,Tertiary,High,27.4,123,131,No,No,2,No,Yes\nGH-0218,41,Male,Cape Coast,Rural,Secondary,Moderate,30.1,145,148,Yes,No,3,Yes,Yes\nGH-0219,59,Female,Kumasi,Urban,Secondary,Low,28.4,124,108,No,No,2,Yes,Yes\nGH-0220,65,Female,Tamale,Rural,,Low,41.7,169,165,Yes,No,2,No,No\nGH-0221,66,Male,Accra,Urban,None,Low,24.8,145,140,Yes,No,1,No,Yes\nGH-0222,55,Female,Kumasi,Urban,Secondary,Moderate,27.2,112,98,No,No,1,Yes,Yes\nGH-0223,51,Female,Kumasi,Urban,Secondary,Moderate,43.3,135,113,No,No,5,Yes,Yes\nGH-0224,59,Female,Kumasi,Urban,Primary,Low,30.1,135,,No,No,2,Yes,No\nGH-0225,31,Female,Accra,Rural,Secondary,High,26.7,120,126,No,No,4,No,No\nGH-0226,33,Male,Accra,Urban,Primary,Low,35.8,117,113,No,Yes,4,No,No\nGH-0227,63,Male,Kumasi,Urban,None,Low,19.8,107,100,No,No,1,Yes,Yes\nGH-0228,57,Female,Cape Coast,Rural,Primary,High,20.3,126,123,No,No,1,Yes,Yes\nGH-0229,57,Male,Kumasi,Urban,None,Moderate,24.4,131,,No,No,4,Yes,Yes\nGH-0230,49,Female,Cape Coast,Rural,Secondary,High,27.8,140,142,Yes,No,4,No,Yes\nGH-0231,35,Male,Tamale,Rural,Tertiary,High,29.8,132,111,No,No,1,No,Yes\nGH-0232,32,Male,Tamale,Urban,None,High,23.8,109,100,No,Yes,4,No,Yes\nGH-0233,58,Female,Cape Coast,Rural,Tertiary,Moderate,39.6,155,166,Yes,No,4,No,No\nGH-0234,60,Female,Kumasi,Urban,Primary,Moderate,17.5,118,114,No,No,0,No,No\nGH-0235,31,Male,Kumasi,Urban,None,Low,25.7,130,119,No,No,4,No,Yes\nGH-0236,36,Female,Accra,Urban,Primary,Moderate,14.7,104,96,No,No,1,No,Yes\nGH-0237,45,Male,Accra,Rural,Primary,Low,16.5,110,91,No,No,1,Yes,Yes\nGH-0238,57,Male,Kumasi,Urban,Secondary,Low,16.8,124,129,No,No,0,Yes,Yes\nGH-0239,42,Male,Accra,Urban,Secondary,Moderate,,138,148,No,No,1,Yes,Yes\nGH-0240,35,Male,Accra,Urban,None,Low,32.5,130,,No,No,0,No,Yes\nGH-0241,59,Female,Ho,Rural,Primary,Moderate,29.1,119,,No,No,1,No,No\nGH-0242,54,Male,Cape Coast,Rural,Secondary,High,31.6,154,153,Yes,No,3,No,Yes\nGH-0243,37,Female,Cape Coast,Urban,Primary,Moderate,32.0,118,106,No,No,1,No,Yes\nGH-0244,37,Female,Kumasi,Rural,Secondary,Moderate,29.8,106,111,No,No,2,No,No\nGH-0245,60,Male,Tamale,Urban,None,Low,18.5,105,113,No,No,1,No,Yes\nGH-0246,29,Female,Tamale,Rural,Secondary,Moderate,31.7,138,144,No,No,1,No,Yes\nGH-0247,42,Female,Kumasi,Urban,Primary,Low,13.5,130,119,No,No,1,No,Yes\nGH-0248,52,Male,Tamale,Urban,None,Low,39.9,135,132,No,No,4,No,No\nGH-0249,48,Male,Tamale,Rural,Primary,Low,55.4,150,153,Yes,No,2,Yes,Yes\nGH-0250,58,Female,Tamale,Rural,Secondary,Moderate,15.8,123,138,No,No,1,No,No\nGH-0251,24,Male,Cape Coast,Rural,Secondary,High,41.1,118,108,No,No,1,No,No\nGH-0252,46,Male,Tamale,Urban,Primary,Moderate,27.1,132,138,No,No,0,Yes,Yes\nGH-0253,50,Male,Tamale,Urban,Primary,High,30.6,146,136,Yes,No,2,Yes,Yes\nGH-0254,50,Male,Cape Coast,Urban,Primary,High,,154,154,Yes,Yes,2,No,No\nGH-0255,53,Female,Kumasi,Urban,Primary,Moderate,24.0,131,124,No,No,4,No,No\nGH-0256,31,Female,Ho,Urban,,High,34.2,123,125,No,No,0,No,No\nGH-0257,65,Female,Accra,Urban,Secondary,Moderate,27.8,151,144,Yes,No,4,No,Yes\nGH-0258,52,Female,Cape Coast,Urban,Primary,Low,40.4,128,143,No,No,1,Yes,Yes\nGH-0259,53,Female,Cape Coast,Urban,None,High,22.5,124,127,No,No,1,No,No\nGH-0260,39,Female,Kumasi,Rural,Primary,Moderate,34.9,148,139,Yes,No,0,Yes,Yes\nGH-0261,48,Female,Cape Coast,Rural,Secondary,High,25.6,132,114,No,No,2,No,No\nGH-0262,63,Female,Kumasi,Rural,Primary,,38.5,175,167,Yes,No,6,No,No\nGH-0263,46,Male,Accra,Urban,Secondary,High,16.1,133,135,No,No,0,Yes,Yes\nGH-0264,49,Male,Ho,Urban,None,Low,29.9,147,149,Yes,No,5,No,No\nGH-0265,50,Female,Kumasi,Urban,None,Low,29.1,137,132,No,No,3,No,No\nGH-0266,25,Male,Tamale,Rural,Secondary,Moderate,41.4,121,128,No,Yes,1,No,Yes\nGH-0267,44,Male,Kumasi,Rural,Secondary,Moderate,26.8,141,127,Yes,No,0,No,No\nGH-0268,55,Female,Tamale,Rural,None,Moderate,33.7,125,102,No,No,1,Yes,Yes\nGH-0269,40,Male,Cape Coast,Rural,Tertiary,Moderate,15.3,95,96,No,No,0,No,No\nGH-0270,45,Male,Kumasi,Urban,Tertiary,Low,26.5,131,148,No,No,0,Yes,Yes\nGH-0271,46,Female,Tamale,Urban,Secondary,High,21.0,138,141,No,No,2,Yes,Yes\nGH-0272,25,Male,Cape Coast,Rural,Primary,High,24.6,136,134,No,Yes,0,Yes,Yes\nGH-0273,56,Male,Cape Coast,Urban,Primary,Low,17.6,130,131,No,No,1,No,No\nGH-0274,28,Female,Ho,Urban,Primary,Moderate,30.8,119,104,No,No,1,No,Yes\nGH-0275,51,Male,Accra,Urban,Secondary,High,33.0,140,127,Yes,No,4,No,No\nGH-0276,44,Male,Kumasi,Urban,Primary,Moderate,26.2,135,139,No,No,0,No,No\nGH-0277,42,Male,Tamale,Urban,Secondary,Moderate,23.7,138,123,No,No,2,No,No\nGH-0278,47,Female,Tamale,Urban,Tertiary,High,26.7,131,111,No,No,0,Yes,Yes\nGH-0279,56,Male,Accra,Urban,Secondary,High,33.5,153,164,Yes,No,0,No,No\nGH-0280,57,Male,Accra,Urban,None,Moderate,29.9,153,151,Yes,Yes,2,No,No\nGH-0281,40,Female,Ho,Rural,Primary,High,25.8,141,136,Yes,No,4,No,Yes\nGH-0282,44,Female,Tamale,Urban,None,Low,17.9,130,113,No,No,2,No,No\nGH-0283,35,Male,Tamale,Rural,Secondary,High,33.9,144,154,Yes,No,1,Yes,Yes\nGH-0284,27,Female,Ho,Rural,Primary,Low,30.8,140,,Yes,No,1,No,No\nGH-0285,58,Female,Cape Coast,Rural,Primary,Moderate,22.6,118,120,No,No,1,Yes,Yes\nGH-0286,32,Female,Cape Coast,Urban,None,Moderate,32.9,146,150,Yes,No,1,Yes,Yes\nGH-0287,36,Female,Ho,Urban,Secondary,Moderate,17.2,113,111,No,No,1,Yes,Yes\nGH-0288,51,Male,Cape Coast,Urban,Secondary,High,20.0,110,99,No,Yes,1,No,No\nGH-0289,28,Female,Kumasi,Urban,,Moderate,43.9,134,124,No,No,0,Yes,Yes\nGH-0290,52,Female,Ho,Urban,None,High,36.2,146,130,Yes,No,2,No,Yes\nGH-0291,35,Female,Accra,Urban,Secondary,Low,20.8,95,96,No,No,0,No,Yes\nGH-0292,31,Male,Accra,Urban,Tertiary,Moderate,38.1,132,127,No,No,1,No,No\nGH-0293,38,Female,Cape Coast,Urban,Tertiary,Low,26.0,90,81,No,No,2,No,No\nGH-0294,35,Male,Accra,Urban,Tertiary,Low,,138,121,No,No,1,No,Yes\nGH-0295,49,Female,Ho,Urban,Tertiary,Moderate,50.4,146,,Yes,No,3,No,No\nGH-0296,64,Female,Kumasi,Rural,Secondary,High,17.2,131,127,No,No,2,No,No\nGH-0297,55,Male,Tamale,Urban,None,Moderate,31.6,151,156,Yes,No,3,No,No\nGH-0298,52,Male,Tamale,Urban,Tertiary,Moderate,17.5,125,117,No,Yes,3,Yes,Yes\nGH-0299,38,Male,Kumasi,Urban,Primary,High,20.0,106,116,No,No,1,No,No\nGH-0300,43,Female,Ho,Urban,Primary,Low,33.9,104,111,No,No,0,No,Yes\nGH-0301,47,Male,Ho,Rural,Tertiary,High,16.0,132,128,No,No,3,Yes,No\nGH-0302,45,Male,Accra,Urban,Tertiary,High,25.4,142,148,Yes,No,9,Yes,Yes\nGH-0303,48,Male,Tamale,Rural,Primary,Moderate,11.9,112,105,No,No,0,No,No\nGH-0304,30,Male,Kumasi,Urban,Tertiary,Moderate,34.1,101,105,No,No,2,Yes,Yes\nGH-0305,69,Male,Tamale,Urban,None,High,29.2,152,169,Yes,Yes,7,No,No\nGH-0306,28,Male,Accra,Urban,Primary,High,15.9,113,116,No,No,1,Yes,Yes\nGH-0307,44,Male,Kumasi,Urban,None,Moderate,23.8,134,120,No,No,2,No,No\nGH-0308,56,Male,Accra,Rural,Secondary,Moderate,20.1,119,111,No,No,2,Yes,Yes\nGH-0309,36,Male,Accra,Rural,None,Moderate,19.0,90,,No,No,0,No,Yes\nGH-0310,59,Female,Tamale,Urban,Secondary,Moderate,27.3,127,148,No,No,2,No,Yes\nGH-0311,27,Female,Tamale,Rural,Primary,Low,20.3,118,119,No,Yes,1,Yes,Yes\nGH-0312,36,Male,Cape Coast,Rural,Primary,High,37.0,150,141,Yes,No,4,Yes,Yes\nGH-0313,18,Male,Kumasi,Urban,Secondary,Moderate,26.4,109,107,No,No,0,Yes,Yes\nGH-0314,59,Female,Cape Coast,Rural,Secondary,Moderate,14.8,116,105,No,No,1,No,No\nGH-0315,30,Female,Cape Coast,Urban,Primary,Moderate,13.6,82,73,No,No,0,Yes,Yes\nGH-0316,36,Female,Tamale,Urban,Primary,Moderate,16.9,128,,No,No,2,No,No\nGH-0317,55,Female,Accra,Urban,Secondary,Moderate,27.8,126,113,No,No,2,Yes,Yes\nGH-0318,50,Male,Kumasi,Urban,Secondary,Moderate,39.1,133,115,No,No,4,No,No\nGH-0319,59,Male,Tamale,Rural,Tertiary,Low,20.9,117,106,No,No,2,No,No\nGH-0320,54,Female,Tamale,Rural,None,Moderate,13.3,114,104,No,No,3,Yes,Yes\nGH-0321,57,Male,Cape Coast,Rural,Tertiary,High,10.8,130,137,No,No,1,Yes,Yes\nGH-0322,39,Female,Ho,Rural,Tertiary,Low,30.0,118,113,No,No,1,No,Yes\nGH-0323,44,Male,Accra,Urban,Tertiary,Moderate,22.9,142,135,Yes,No,1,Yes,Yes\nGH-0324,55,Female,Ho,Rural,Primary,Moderate,26.0,139,144,No,No,2,Yes,Yes\nGH-0325,55,Male,Kumasi,Urban,Secondary,Moderate,22.2,135,134,No,Yes,2,No,No\nGH-0326,57,Female,Ho,Urban,Primary,Low,32.8,152,,Yes,No,2,Yes,Yes\nGH-0327,35,Male,Accra,Rural,Secondary,High,33.0,117,102,No,Yes,2,No,Yes\nGH-0328,31,Female,Kumasi,Urban,Primary,Low,27.2,118,123,No,No,4,Yes,Yes\nGH-0329,29,Female,Cape Coast,Rural,Secondary,Low,27.8,126,120,No,Yes,0,No,No\nGH-0330,39,Male,Ho,Urban,None,Low,21.4,129,125,No,No,1,No,No\nGH-0331,44,Male,Accra,Urban,Primary,Moderate,37.2,132,123,No,Yes,0,Yes,Yes\nGH-0332,30,Female,Cape Coast,Rural,Primary,Moderate,21.8,98,94,No,No,0,No,Yes\nGH-0333,43,Male,Accra,Urban,None,Moderate,17.8,96,100,No,No,1,Yes,Yes\nGH-0334,53,Female,Ho,Rural,Primary,,39.1,151,145,Yes,No,0,No,No\nGH-0335,58,Female,Ho,Urban,Secondary,Moderate,34.8,139,117,No,No,1,No,Yes\nGH-0336,38,Female,Accra,Urban,Secondary,Low,25.4,116,108,No,No,2,No,No\nGH-0337,53,Male,Ho,Rural,Secondary,Low,28.8,135,122,No,No,0,No,No\nGH-0338,29,Male,Kumasi,Rural,Tertiary,Low,9.4,101,112,No,No,1,No,No\nGH-0339,37,Male,Cape Coast,Urban,Primary,Moderate,28.6,120,100,No,Yes,1,No,No\nGH-0340,47,Male,Cape Coast,Urban,Secondary,High,32.5,148,133,Yes,No,1,Yes,Yes\nGH-0341,37,Male,Cape Coast,Rural,None,Moderate,33.8,113,110,No,Yes,1,No,No\nGH-0342,35,Male,Cape Coast,Urban,Secondary,Low,24.7,105,95,No,No,3,Yes,No\nGH-0343,49,Female,Tamale,Rural,None,Moderate,21.5,106,86,No,No,3,No,No\nGH-0344,32,Male,Kumasi,Urban,None,Moderate,31.7,122,119,No,No,0,Yes,Yes\nGH-0345,47,Male,Ho,Rural,,Low,22.1,131,137,No,No,1,No,No\nGH-0346,44,Female,Kumasi,Urban,Secondary,Moderate,26.1,115,104,No,No,1,Yes,Yes\nGH-0347,52,Female,Kumasi,Urban,Primary,Low,14.3,118,116,No,No,3,No,No\nGH-0348,55,Male,Tamale,Rural,Secondary,High,36.4,159,150,Yes,No,2,No,No\nGH-0349,47,Female,Tamale,Rural,Primary,Moderate,26.3,150,149,Yes,No,0,No,Yes\nGH-0350,39,Male,Ho,Urban,Secondary,Moderate,28.1,138,148,No,No,2,No,No\nGH-0351,58,Male,Tamale,Rural,Secondary,Moderate,35.4,137,137,No,No,4,Yes,Yes\nGH-0352,48,Male,Ho,Rural,None,Moderate,30.7,115,106,No,Yes,2,No,Yes\nGH-0353,34,Male,Tamale,Rural,Primary,High,20.7,89,95,No,Yes,0,No,No\nGH-0354,47,Female,Accra,Urban,Primary,Low,15.0,106,,No,No,3,No,Yes\nGH-0355,37,Female,Tamale,Rural,Secondary,Low,32.6,126,140,No,Yes,1,No,No\nGH-0356,18,Male,Kumasi,Rural,Primary,Moderate,,98,102,No,No,0,Yes,Yes\nGH-0357,33,Male,Accra,Urban,Secondary,Low,27.1,146,140,Yes,No,1,No,No\nGH-0358,40,Male,Kumasi,Urban,Secondary,Moderate,26.8,110,104,No,No,0,Yes,No\nGH-0359,39,Male,Accra,Rural,Primary,Low,18.7,108,97,No,No,2,No,No\nGH-0360,25,Male,Kumasi,Urban,Primary,Moderate,33.2,94,89,No,No,1,No,No\nGH-0361,41,Male,Kumasi,Urban,None,Moderate,32.2,147,128,Yes,No,3,No,Yes\nGH-0362,51,Male,Tamale,Rural,Secondary,Low,32.5,127,127,No,Yes,0,No,No\nGH-0363,30,Male,Ho,Rural,Secondary,Low,18.6,87,78,No,No,1,No,No\nGH-0364,48,Male,Ho,Urban,,Moderate,29.9,131,133,No,No,1,No,Yes\nGH-0365,19,Female,Cape Coast,Rural,Secondary,Moderate,25.8,130,115,No,No,0,Yes,Yes\nGH-0366,52,Male,Accra,Rural,Tertiary,Low,26.0,155,153,Yes,No,5,Yes,No\nGH-0367,38,Male,Cape Coast,Rural,Secondary,Moderate,27.0,122,121,No,No,0,Yes,Yes\nGH-0368,28,Male,Tamale,Urban,None,Low,18.4,118,114,No,No,1,No,No\nGH-0369,60,Female,Cape Coast,Urban,Secondary,Moderate,27.1,129,133,No,No,0,Yes,Yes\nGH-0370,51,Female,Tamale,Urban,Secondary,Moderate,12.4,113,112,No,No,1,Yes,Yes\nGH-0371,57,Female,Accra,Urban,Primary,High,17.7,121,131,No,No,1,Yes,Yes\nGH-0372,49,Female,Tamale,Urban,Primary,High,24.1,150,,Yes,No,5,No,Yes\nGH-0373,50,Female,Ho,Urban,None,Moderate,19.7,113,,No,No,1,No,Yes\nGH-0374,40,Female,Kumasi,Rural,Secondary,Moderate,30.9,101,91,No,No,2,Yes,Yes\nGH-0375,51,Male,Cape Coast,Rural,None,Moderate,19.1,111,111,No,No,1,Yes,Yes\nGH-0376,44,Male,Tamale,Urban,Secondary,High,,142,150,Yes,No,6,No,Yes\nGH-0377,37,Female,Cape Coast,Rural,Tertiary,Moderate,27.4,124,120,No,No,0,No,Yes\nGH-0378,43,Male,Accra,Urban,Secondary,Moderate,24.4,118,119,No,No,0,No,Yes\nGH-0379,29,Female,Tamale,Urban,None,Low,21.2,112,116,No,No,0,Yes,Yes\nGH-0380,45,Female,Kumasi,Urban,Secondary,Moderate,28.0,130,110,No,No,1,Yes,Yes\nGH-0381,51,Male,Tamale,Urban,Secondary,Moderate,21.6,123,,No,Yes,3,Yes,Yes\nGH-0382,47,Male,Kumasi,Urban,Secondary,Low,32.6,141,111,Yes,No,1,No,No\nGH-0383,52,Male,Kumasi,Rural,Primary,Low,23.6,115,114,No,No,3,Yes,Yes\nGH-0384,41,Female,Tamale,Urban,Tertiary,Low,37.2,117,123,No,Yes,1,Yes,Yes\nGH-0385,45,Female,Accra,Urban,Secondary,Low,14.4,124,122,No,No,1,No,No\nGH-0386,45,Female,Accra,Urban,Primary,Low,18.4,117,120,No,No,2,No,No\nGH-0387,70,Male,Accra,Rural,Primary,Low,22.5,99,88,No,No,3,Yes,Yes\nGH-0388,28,Male,Cape Coast,Urban,None,High,34.3,124,125,No,No,0,No,No\nGH-0389,71,Male,Kumasi,Rural,None,Low,19.2,141,137,Yes,No,1,No,No\nGH-0390,36,Male,Tamale,Rural,None,Moderate,46.2,160,149,Yes,Yes,1,No,No\nGH-0391,41,Female,Ho,Rural,None,High,24.5,134,131,No,Yes,0,No,No\nGH-0392,49,Male,Accra,Urban,Tertiary,Moderate,39.6,147,141,Yes,Yes,1,No,No\nGH-0393,53,Male,Kumasi,Urban,Secondary,High,37.1,159,160,Yes,Yes,2,Yes,Yes\nGH-0394,45,Female,Accra,Urban,Primary,Low,34.9,144,131,Yes,No,0,Yes,Yes\nGH-0395,48,Female,Kumasi,Rural,Secondary,High,19.0,139,120,No,No,2,Yes,Yes\nGH-0396,63,Female,Ho,Urban,Tertiary,Moderate,55.4,147,145,Yes,No,2,Yes,Yes\nGH-0397,79,Male,Accra,Urban,Primary,Moderate,36.7,155,160,Yes,Yes,4,No,No\nGH-0398,50,Male,Ho,Rural,Primary,Moderate,14.2,101,96,No,Yes,0,No,No\nGH-0399,54,Female,Kumasi,Rural,None,Low,17.6,134,114,No,No,1,No,Yes\nGH-0400,44,Male,Kumasi,Urban,None,Low,47.6,136,134,No,Yes,2,No,No\nGH-0401,67,Female,Tamale,Urban,None,Low,30.0,125,107,No,No,0,No,No\nGH-0402,44,Male,Accra,Urban,Secondary,Moderate,29.7,154,158,Yes,Yes,5,Yes,No\nGH-0403,52,Female,Accra,Urban,Secondary,,28.5,117,114,No,No,6,Yes,Yes\nGH-0404,32,Male,Tamale,Rural,Secondary,Moderate,41.1,129,115,No,No,0,Yes,Yes\nGH-0405,18,Female,Tamale,Urban,Secondary,Moderate,39.9,123,116,No,No,0,No,Yes\nGH-0406,74,Male,Kumasi,Urban,None,Low,35.0,147,147,Yes,No,1,Yes,Yes\nGH-0407,59,Female,Accra,Urban,Secondary,Moderate,18.2,140,120,Yes,No,3,No,No\nGH-0408,57,Male,Ho,Urban,Tertiary,Low,57.9,169,165,Yes,No,3,Yes,Yes\nGH-0409,33,Male,Tamale,Rural,Secondary,High,15.5,103,98,No,Yes,2,No,No\nGH-0410,24,Female,Ho,Rural,Secondary,High,10.6,113,111,No,No,0,Yes,Yes\nGH-0411,42,Male,Tamale,Urban,Secondary,Moderate,45.3,140,143,Yes,No,0,Yes,Yes\nGH-0412,47,Female,Cape Coast,Rural,None,Low,17.9,109,103,No,No,3,No,No\nGH-0413,54,Female,Cape Coast,Urban,Tertiary,Moderate,21.7,134,118,No,No,2,No,No\nGH-0414,45,Female,Ho,Urban,Primary,Low,31.3,133,130,No,No,1,No,No\nGH-0415,62,Female,Accra,Urban,None,High,21.7,136,120,No,No,3,Yes,No\nGH-0416,50,Female,Tamale,Urban,Secondary,Moderate,21.2,112,115,No,No,3,Yes,Yes\nGH-0417,49,Male,Ho,Urban,None,Moderate,24.3,130,124,No,No,2,Yes,Yes\nGH-0418,60,Female,Kumasi,Rural,,Low,30.8,119,109,No,No,3,No,Yes\nGH-0419,37,Male,Tamale,Rural,Secondary,Moderate,24.2,132,123,No,No,3,Yes,No\nGH-0420,50,Male,Kumasi,Rural,None,Low,37.2,134,131,No,No,0,Yes,Yes\n";
+const EXAMPLE_CSV = "Participant ID,Age (years),Sex,District,Residence,Education level,Salt intake,BMI,Systolic BP,Systolic BP 3 months,Hypertension,Smoker,Clinic visits (12m),Aware of status (baseline),Aware of status (3 months),Clinic,Systolic BP 6 months,Follow-up (months),Lost to follow-up,Self-rated health,Usual source of care\nGH-0001,55,Female,Tamale,Rural,Primary,High,17.2,152,149,Yes,No,4,No,Yes,TAM-2,137,10.6,No,Poor,CHPS compound\nGH-0002,36,Female,Kumasi,Urban,Primary,Low,20.7,124,114,No,No,2,Yes,Yes,KUM-2,117,5.7,Yes,Very good,Hospital\nGH-0003,38,Male,Kumasi,Urban,Secondary,Moderate,49.0,145,143,Yes,No,2,Yes,No,KUM-1,141,12.1,No,Good,CHPS compound\nGH-0004,55,Male,Accra,Rural,Secondary,Moderate,25.1,121,113,No,No,5,Yes,Yes,ACC-2,124,7.6,No,Fair,CHPS compound\nGH-0005,53,Female,Accra,Urban,Secondary,Moderate,24.0,115,,No,No,1,No,Yes,ACC-2,110,12.5,No,Good,Hospital\nGH-0006,43,Female,Ho,Rural,Primary,High,12.2,115,109,No,No,1,No,No,HO-2,104,11.2,No,Fair,CHPS compound\nGH-0007,62,Female,Cape Coast,Urban,None,High,15.6,113,101,No,No,3,No,No,CAP-4,107,19.4,Yes,Fair,Hospital\nGH-0008,45,Female,Tamale,Rural,Primary,Moderate,34.0,143,156,Yes,No,1,Yes,Yes,TAM-1,133,16.4,Yes,Very good,CHPS compound\nGH-0009,21,Male,Kumasi,Urban,Primary,Moderate,42.4,134,134,No,No,0,No,No,KUM-1,125,23.2,No,Good,CHPS compound\nGH-0010,36,Male,Accra,Urban,None,High,26.0,110,106,No,No,0,No,Yes,ACC-3,101,2.6,Yes,Good,Pharmacy\nGH-0011,27,Male,Cape Coast,Rural,None,Low,19.1,107,105,No,No,0,Yes,Yes,CAP-1,96,24.4,No,Fair,CHPS compound\nGH-0012,61,Female,Cape Coast,Rural,Secondary,High,20.7,144,,Yes,No,0,No,No,CAP-2,148,2.1,Yes,Good,Hospital\nGH-0013,53,Female,Kumasi,Urban,Primary,Moderate,21.2,141,127,Yes,No,1,No,Yes,KUM-1,132,4.2,Yes,Very good,Hospital\nGH-0014,48,Male,Ho,Urban,Tertiary,Low,25.8,131,127,No,No,5,Yes,Yes,HO-3,125,35.3,No,Good,Hospital\nGH-0015,18,Female,Kumasi,Urban,Secondary,Moderate,27.7,121,113,No,No,0,No,No,KUM-1,111,20.5,No,Poor,CHPS compound\nGH-0016,27,Female,Ho,Urban,None,Moderate,46.1,138,131,No,No,2,No,No,HO-1,140,10.1,No,Fair,Pharmacy\nGH-0017,44,Male,Accra,Urban,Secondary,High,25.1,125,113,No,Yes,3,Yes,Yes,ACC-1,105,8.6,No,Good,CHPS compound\nGH-0018,23,Female,Accra,Rural,None,Low,17.6,106,96,No,No,0,Yes,Yes,ACC-2,106,24.7,No,Fair,Pharmacy\nGH-0019,58,Female,Accra,Urban,Primary,Moderate,23.1,132,115,No,No,3,No,No,ACC-3,134,32.0,No,Fair,Hospital\nGH-0020,45,Female,Tamale,Rural,Primary,High,33.9,129,116,No,No,1,No,No,TAM-2,116,26.2,No,Good,Hospital\nGH-0021,44,Male,Kumasi,Urban,None,High,22.1,132,134,No,No,3,Yes,Yes,KUM-1,145,3.2,Yes,Poor,CHPS compound\nGH-0022,45,Female,Accra,Rural,Tertiary,Moderate,12.3,113,107,No,No,1,No,No,ACC-4,105,18.2,No,Fair,Hospital\nGH-0023,34,Male,Kumasi,Urban,Primary,High,13.4,120,108,No,No,1,No,No,KUM-3,92,11.5,No,Fair,CHPS compound\nGH-0024,32,Female,Tamale,Rural,Secondary,Low,21.5,112,107,No,No,2,No,No,TAM-4,97,18.8,No,Poor,CHPS compound\nGH-0025,21,Female,Accra,Urban,Primary,Moderate,20.3,108,129,No,No,0,No,No,ACC-1,80,23.5,No,Good,CHPS compound\nGH-0026,46,Female,Accra,Urban,Secondary,Low,30.1,104,84,No,No,4,Yes,Yes,ACC-1,89,18.6,No,Good,CHPS compound\nGH-0027,51,Male,Tamale,Urban,Tertiary,Low,30.4,164,156,Yes,Yes,0,Yes,Yes,TAM-1,169,34.2,No,Very good,CHPS compound\nGH-0028,43,Female,Kumasi,Urban,None,High,44.8,155,149,Yes,No,1,No,No,KUM-3,154,2.4,Yes,Fair,Hospital\nGH-0029,42,Male,Accra,Urban,Primary,High,21.8,133,126,No,No,3,No,No,ACC-2,128,2.7,Yes,Very good,Hospital\nGH-0030,34,Male,Accra,Urban,Secondary,Moderate,25.8,146,150,Yes,No,0,Yes,Yes,ACC-1,138,12.6,No,Very good,CHPS compound\nGH-0031,49,Male,Tamale,Urban,None,Moderate,36.5,154,150,Yes,No,4,Yes,Yes,TAM-2,119,31.2,No,Good,Hospital\nGH-0032,18,Female,Cape Coast,Rural,Secondary,High,19.7,115,114,No,No,0,Yes,Yes,CAP-2,113,23.3,No,Good,CHPS compound\nGH-0033,32,Female,Ho,Rural,Tertiary,Moderate,19.0,121,125,No,No,3,Yes,Yes,HO-3,118,23.7,No,Very good,CHPS compound\nGH-0034,37,Male,Kumasi,Urban,Secondary,Moderate,16.8,138,133,No,No,1,No,Yes,KUM-1,125,13.4,Yes,Fair,CHPS compound\nGH-0035,39,Female,Accra,Rural,Secondary,Low,34.3,131,124,No,No,2,No,No,ACC-2,128,7.3,Yes,Very good,CHPS compound\nGH-0036,49,Female,Cape Coast,Rural,Primary,Moderate,28.7,113,,No,No,1,No,No,CAP-2,100,14.6,No,Fair,CHPS compound\nGH-0037,43,Male,Kumasi,Rural,None,Low,20.3,101,95,No,Yes,3,Yes,Yes,KUM-1,115,6.3,No,Good,CHPS compound\nGH-0038,48,Male,Accra,Rural,Tertiary,Moderate,15.8,139,136,No,No,2,No,No,ACC-1,125,30.3,No,Very good,CHPS compound\nGH-0039,62,Female,Cape Coast,Rural,Secondary,Low,34.1,138,129,No,No,1,No,No,CAP-2,133,0.8,Yes,Fair,CHPS compound\nGH-0040,64,Female,Accra,Rural,Secondary,Moderate,37.6,154,141,Yes,No,6,No,No,ACC-1,137,13.5,Yes,Good,CHPS compound\nGH-0041,54,Male,Ho,Rural,Primary,Moderate,18.7,126,113,No,No,2,No,Yes,HO-3,107,4.9,Yes,Fair,CHPS compound\nGH-0042,62,Male,Accra,Rural,None,High,19.1,142,140,Yes,No,2,No,No,ACC-3,138,16.2,Yes,Very good,Hospital\nGH-0043,68,Male,Accra,Rural,Secondary,High,36.8,144,139,Yes,No,2,No,No,ACC-4,134,0.5,Yes,Very good,CHPS compound\nGH-0044,51,Female,Ho,Urban,Secondary,Low,19.2,127,126,No,No,2,Yes,Yes,HO-2,107,8.9,Yes,Fair,Hospital\nGH-0045,28,Female,Tamale,Urban,None,High,21.8,87,64,No,No,0,No,Yes,TAM-4,98,28.2,No,Good,Hospital\nGH-0046,59,Female,Kumasi,Rural,Primary,High,15.0,124,111,No,No,0,No,No,KUM-3,132,27.0,No,Poor,CHPS compound\nGH-0047,33,Female,Kumasi,Urban,Secondary,Moderate,25.0,101,86,No,Yes,0,No,No,KUM-4,94,27.9,No,Good,Hospital\nGH-0048,70,Male,Tamale,Rural,None,Moderate,36.5,152,157,Yes,No,0,No,Yes,TAM-4,153,12.1,Yes,Good,Hospital\nGH-0049,68,Female,Ho,Rural,Primary,Low,40.3,150,143,Yes,No,4,No,Yes,HO-4,157,8.5,No,Good,Hospital\nGH-0050,39,Female,Kumasi,Urban,Primary,Low,38.4,129,112,No,No,1,No,No,KUM-2,130,19.2,Yes,Very good,Hospital\nGH-0051,32,Female,Kumasi,Urban,Secondary,Moderate,32.0,126,133,No,No,0,Yes,Yes,KUM-2,118,26.3,No,Good,Hospital\nGH-0052,37,Male,Accra,Urban,Primary,Moderate,39.2,114,111,No,Yes,1,No,No,ACC-1,107,34.2,No,Good,Hospital\nGH-0053,45,Female,Accra,Rural,Secondary,Low,19.9,104,117,No,No,0,No,No,ACC-2,96,29.6,Yes,Good,CHPS compound\nGH-0054,63,Male,Kumasi,Urban,Primary,High,39.4,152,121,Yes,Yes,6,Yes,Yes,KUM-2,163,2.7,Yes,Fair,Pharmacy\nGH-0055,30,Female,Kumasi,Rural,Primary,High,16.4,117,111,No,No,1,Yes,Yes,KUM-2,125,18.1,No,Very good,CHPS compound\nGH-0056,57,Male,Kumasi,Urban,None,Moderate,26.0,139,139,No,No,3,Yes,Yes,KUM-2,134,2.7,Yes,Good,Pharmacy\nGH-0057,19,Male,Kumasi,Rural,Primary,High,29.6,99,87,No,Yes,3,No,Yes,KUM-2,97,20.4,No,Good,CHPS compound\nGH-0058,62,Male,Accra,Urban,Tertiary,Moderate,31.7,160,159,Yes,No,10,No,No,ACC-2,161,10.9,Yes,Good,Hospital\nGH-0059,45,Female,Tamale,Rural,Secondary,Low,19.9,116,106,No,No,0,Yes,Yes,TAM-2,101,12.2,Yes,Poor,Pharmacy\nGH-0060,49,Male,Ho,Urban,Secondary,Moderate,28.7,154,154,Yes,No,4,No,No,HO-1,156,7.0,Yes,Good,Hospital\nGH-0061,45,Female,Kumasi,Urban,Secondary,Low,40.3,145,131,Yes,No,2,No,No,KUM-1,152,17.7,No,Very good,Pharmacy\nGH-0062,58,Female,Accra,Rural,None,Moderate,,152,154,Yes,No,2,No,No,ACC-3,133,2.1,Yes,Good,Pharmacy\nGH-0063,51,Female,Kumasi,Urban,Secondary,High,39.3,151,145,Yes,No,4,No,No,KUM-2,150,20.0,No,Good,Hospital\nGH-0064,68,Female,Tamale,Urban,Secondary,Low,16.3,121,126,No,No,2,No,No,TAM-1,134,7.7,Yes,Very good,CHPS compound\nGH-0065,23,Female,Cape Coast,Rural,Secondary,Low,,96,90,No,No,2,No,No,CAP-4,87,18.7,No,Good,CHPS compound\nGH-0066,34,Male,Cape Coast,Rural,Tertiary,Low,15.8,122,119,No,No,0,No,Yes,CAP-2,127,17.7,No,Very good,CHPS compound\nGH-0067,29,Female,Tamale,Urban,None,Low,20.2,104,111,No,No,2,Yes,Yes,TAM-3,86,29.0,No,Very good,CHPS compound\nGH-0068,55,Female,Accra,Rural,None,Low,30.8,108,88,No,No,3,No,Yes,ACC-1,102,3.1,Yes,Poor,Hospital\nGH-0069,24,Male,Ho,Rural,Tertiary,,29.1,123,121,No,No,1,No,Yes,HO-1,108,12.0,No,Very good,CHPS compound\nGH-0070,78,Female,Accra,Rural,Primary,Low,9.3,129,125,No,No,2,No,No,ACC-3,110,14.0,No,Fair,Hospital\nGH-0071,47,Male,Kumasi,Urban,Tertiary,Moderate,30.3,139,126,No,No,4,Yes,Yes,KUM-3,127,8.1,No,Very good,Pharmacy\nGH-0072,62,Female,Accra,Urban,Primary,Low,32.2,147,151,Yes,No,1,No,No,ACC-4,134,6.5,Yes,Very good,Hospital\nGH-0073,33,Male,Ho,Rural,Primary,Moderate,25.8,148,153,Yes,Yes,1,No,No,HO-4,155,18.2,No,Very good,Hospital\nGH-0074,49,Male,Cape Coast,Rural,Secondary,Moderate,24.0,110,112,No,No,1,Yes,Yes,CAP-3,115,8.1,No,Poor,Pharmacy\nGH-0075,54,Male,Cape Coast,Rural,Primary,High,15.5,150,136,Yes,No,4,No,No,CAP-4,138,10.3,Yes,Poor,CHPS compound\nGH-0076,37,Male,Kumasi,Urban,None,Moderate,29.2,136,,No,No,0,Yes,Yes,KUM-1,129,6.5,Yes,Very good,Hospital\nGH-0077,43,Male,Tamale,Urban,Primary,Moderate,20.4,122,94,No,No,4,Yes,Yes,TAM-4,112,33.6,No,Poor,Hospital\nGH-0078,66,Female,Cape Coast,Urban,Primary,Moderate,38.1,130,124,No,No,0,Yes,Yes,CAP-1,121,12.0,No,Very good,Hospital\nGH-0079,62,Female,Tamale,Urban,Tertiary,Low,23.5,131,123,No,No,3,No,No,TAM-2,119,9.8,Yes,Poor,Hospital\nGH-0080,54,Female,Accra,Urban,Tertiary,Low,28.3,138,129,No,No,2,No,Yes,ACC-1,124,4.2,Yes,Good,Hospital\nGH-0081,72,Male,Accra,Urban,None,Low,26.0,140,141,Yes,No,0,No,No,ACC-4,128,14.4,Yes,Good,Hospital\nGH-0082,21,Female,Kumasi,Urban,Primary,Low,23.9,102,98,No,No,0,No,No,KUM-1,89,34.2,No,Very good,CHPS compound\nGH-0083,50,Male,Kumasi,Urban,Secondary,,31.0,128,129,No,No,1,No,No,KUM-3,108,28.0,No,Fair,Hospital\nGH-0084,41,Female,Tamale,Rural,None,Moderate,35.6,122,118,No,No,0,Yes,Yes,TAM-1,120,16.7,No,Very good,Pharmacy\nGH-0085,65,Female,Tamale,Urban,None,High,16.9,140,138,Yes,No,5,No,No,TAM-1,136,6.5,Yes,Fair,Hospital\nGH-0086,60,Female,Kumasi,Urban,None,Low,30.1,142,125,Yes,No,3,No,No,KUM-4,138,2.3,Yes,Very good,Hospital\nGH-0087,61,Female,Kumasi,Urban,Tertiary,Moderate,41.3,160,154,Yes,No,0,No,No,KUM-1,173,19.9,No,Good,Pharmacy\nGH-0088,38,Female,Kumasi,Urban,Primary,Moderate,16.8,103,98,No,No,0,No,No,KUM-2,101,23.0,No,Fair,Pharmacy\nGH-0089,53,Female,Kumasi,Urban,None,High,,148,145,Yes,No,5,No,No,KUM-2,165,3.3,Yes,Fair,CHPS compound\nGH-0090,60,Male,Cape Coast,Rural,Primary,High,21.7,169,171,Yes,No,1,No,No,CAP-1,157,28.9,No,Good,CHPS compound\nGH-0091,63,Female,Cape Coast,Urban,None,Moderate,26.4,137,,No,No,0,No,No,CAP-2,130,29.8,No,Poor,Pharmacy\nGH-0092,34,Female,Tamale,Urban,Secondary,Moderate,21.2,130,128,No,No,5,No,No,TAM-1,124,20.5,No,Good,Hospital\nGH-0093,37,Male,Cape Coast,Rural,Primary,High,21.5,106,91,No,No,0,No,No,CAP-4,106,6.1,Yes,Very good,CHPS compound\nGH-0094,49,Female,Ho,Urban,Secondary,Low,21.5,152,143,Yes,No,5,No,No,HO-3,140,5.8,Yes,Fair,Hospital\nGH-0095,64,Female,Kumasi,Urban,Tertiary,Moderate,39.7,156,157,Yes,No,4,Yes,Yes,KUM-1,144,1.3,Yes,Good,Pharmacy\nGH-0096,54,Male,Kumasi,Rural,Secondary,High,33.3,159,162,Yes,No,2,No,No,KUM-4,154,14.7,No,Good,CHPS compound\nGH-0097,64,Female,Kumasi,Rural,Primary,High,25.1,142,140,Yes,No,2,Yes,Yes,KUM-4,141,12.1,No,Poor,Pharmacy\nGH-0098,21,Male,Cape Coast,Rural,None,Low,26.3,92,78,No,No,2,No,No,CAP-4,88,21.8,No,Fair,Hospital\nGH-0099,42,Female,Tamale,Rural,Primary,Moderate,20.2,125,112,No,No,1,No,No,TAM-4,117,26.1,No,Very good,Hospital\nGH-0100,52,Female,Kumasi,Urban,Primary,Moderate,35.6,138,137,No,No,2,No,No,KUM-1,133,21.7,Yes,Fair,Hospital\nGH-0101,50,Male,Ho,Rural,Primary,Low,18.7,134,135,No,No,0,Yes,No,HO-3,125,20.3,No,Poor,Pharmacy\nGH-0102,21,Male,Tamale,Rural,None,High,29.7,111,102,No,Yes,2,No,No,TAM-3,112,34.5,No,Fair,CHPS compound\nGH-0103,60,Male,Kumasi,Rural,Secondary,Moderate,,101,104,No,Yes,3,No,No,KUM-3,100,12.3,Yes,Good,CHPS compound\nGH-0104,50,Male,Accra,Urban,Secondary,Moderate,32.3,136,134,No,Yes,2,No,No,ACC-4,115,23.9,Yes,Good,Hospital\nGH-0105,40,Female,Ho,Urban,Secondary,Moderate,19.7,113,94,No,No,1,No,No,HO-1,118,8.7,No,Poor,Pharmacy\nGH-0106,62,Male,Tamale,Rural,Primary,Low,27.2,146,147,Yes,Yes,2,Yes,Yes,TAM-4,136,6.2,Yes,Good,CHPS compound\nGH-0107,24,Male,Kumasi,Urban,Primary,High,16.2,100,95,No,No,2,No,No,KUM-3,102,23.0,No,Good,CHPS compound\nGH-0108,39,Male,Cape Coast,Rural,Secondary,High,28.9,126,122,No,No,1,No,No,CAP-2,111,11.8,No,Very good,CHPS compound\nGH-0109,57,Female,Kumasi,Rural,Primary,Low,24.7,123,111,No,No,1,Yes,Yes,KUM-3,118,3.2,Yes,Fair,Hospital\nGH-0110,51,Male,Accra,Urban,Primary,Moderate,16.2,113,107,No,No,1,No,Yes,ACC-4,113,18.9,No,Good,Pharmacy\nGH-0111,43,Male,Kumasi,Urban,Tertiary,Low,32.3,138,146,No,Yes,0,No,Yes,KUM-2,128,10.0,No,Poor,CHPS compound\nGH-0112,44,Male,Accra,Urban,Tertiary,Low,24.5,120,125,No,No,1,Yes,No,ACC-2,142,29.1,No,Good,Hospital\nGH-0113,43,Female,Kumasi,Rural,Secondary,Low,28.0,117,108,No,No,0,Yes,Yes,KUM-1,121,30.5,No,Very good,CHPS compound\nGH-0114,57,Male,Tamale,Rural,Tertiary,High,23.3,127,123,No,No,0,No,No,TAM-4,113,8.2,No,Poor,Pharmacy\nGH-0115,42,Male,Accra,Urban,Secondary,High,20.5,121,121,No,No,4,Yes,Yes,ACC-3,121,14.3,No,Very good,Hospital\nGH-0116,55,Female,Tamale,Urban,Primary,Moderate,29.6,154,162,Yes,No,1,No,Yes,TAM-2,149,27.4,No,Fair,Pharmacy\nGH-0117,19,Female,Tamale,Urban,Secondary,Low,16.3,97,90,No,No,0,Yes,Yes,TAM-3,96,30.0,No,Poor,CHPS compound\nGH-0118,62,Female,Kumasi,Urban,,Low,29.5,127,127,No,No,0,Yes,Yes,KUM-2,135,10.2,No,Good,Pharmacy\nGH-0119,78,Male,Tamale,Rural,None,Low,16.9,137,127,No,No,1,No,Yes,TAM-1,135,4.7,Yes,Poor,Pharmacy\nGH-0120,52,Male,Kumasi,Rural,Tertiary,High,28.2,148,141,Yes,No,4,No,No,KUM-3,155,33.6,No,Very good,CHPS compound\nGH-0121,45,Male,Kumasi,Urban,Tertiary,Moderate,20.2,123,127,No,No,1,No,Yes,KUM-2,123,13.5,No,Fair,CHPS compound\nGH-0122,39,Male,Cape Coast,Rural,Primary,Low,28.3,130,137,No,No,0,No,Yes,CAP-3,122,26.8,No,Very good,CHPS compound\nGH-0123,55,Male,Accra,Rural,Primary,High,32.8,152,153,Yes,Yes,1,No,Yes,ACC-3,138,3.4,Yes,Good,Pharmacy\nGH-0124,38,Female,Accra,Urban,Primary,High,16.8,127,120,No,No,3,Yes,Yes,ACC-4,128,11.5,No,Very good,Hospital\nGH-0125,35,Male,Accra,Urban,Secondary,Moderate,15.5,116,106,No,Yes,0,No,No,ACC-2,114,27.6,No,Good,Hospital\nGH-0126,18,Female,Tamale,Rural,Primary,Moderate,29.3,96,109,No,No,2,No,Yes,TAM-4,97,0.5,Yes,Very good,Hospital\nGH-0127,49,Female,Kumasi,Urban,None,Low,25.5,123,107,No,No,1,No,No,KUM-2,127,23.4,No,Poor,Pharmacy\nGH-0128,42,Female,Ho,Urban,Tertiary,Moderate,20.5,110,104,No,No,2,No,No,HO-2,103,27.6,No,Fair,Hospital\nGH-0129,43,Female,Kumasi,Urban,Secondary,Low,28.6,134,133,No,No,0,No,No,KUM-2,123,14.9,No,Fair,Pharmacy\nGH-0130,46,Male,Kumasi,Urban,Tertiary,Low,21.1,139,152,No,No,1,No,No,KUM-2,133,6.3,Yes,Good,Hospital\nGH-0131,37,Male,Cape Coast,Urban,Secondary,High,17.9,115,120,No,No,3,Yes,Yes,CAP-4,108,6.5,No,Fair,CHPS compound\nGH-0132,48,Female,Ho,Rural,Primary,Low,11.6,121,107,No,No,4,No,Yes,HO-4,106,10.0,No,Fair,Hospital\nGH-0133,32,Female,Ho,Rural,Secondary,Low,34.9,129,124,No,No,0,No,Yes,HO-4,134,3.8,Yes,Very good,Hospital\nGH-0134,44,Male,Cape Coast,Urban,Primary,Low,38.2,133,128,No,No,1,Yes,Yes,CAP-1,123,19.6,No,Poor,Hospital\nGH-0135,42,Male,Tamale,Rural,Tertiary,Low,35.1,151,150,Yes,No,2,No,No,TAM-2,135,3.5,Yes,Good,CHPS compound\nGH-0136,24,Male,Kumasi,Urban,Primary,Low,34.7,116,116,No,No,1,No,Yes,KUM-2,111,9.1,No,Good,Hospital\nGH-0137,30,Male,Ho,Rural,Primary,High,23.0,112,111,No,No,3,No,Yes,HO-1,108,20.3,No,Good,CHPS compound\nGH-0138,38,Female,Cape Coast,Rural,Secondary,High,43.9,130,118,No,Yes,0,No,No,CAP-4,127,25.2,No,Fair,CHPS compound\nGH-0139,39,Female,Accra,Rural,Primary,High,20.4,134,122,No,No,1,Yes,Yes,ACC-2,122,20.0,No,Good,CHPS compound\nGH-0140,49,Female,Ho,Rural,Primary,Moderate,33.5,125,115,No,No,1,No,No,HO-4,118,24.9,No,Good,CHPS compound\nGH-0141,41,Male,Kumasi,Urban,Primary,High,32.3,125,123,No,Yes,5,Yes,Yes,KUM-2,127,30.0,No,Very good,Hospital\nGH-0142,45,Female,Accra,Urban,None,High,24.8,142,134,Yes,No,0,Yes,Yes,ACC-1,128,10.1,No,Good,Hospital\nGH-0143,41,Female,Tamale,Urban,Secondary,Moderate,43.4,143,125,Yes,No,0,No,Yes,TAM-2,120,7.7,Yes,Very good,Pharmacy\nGH-0144,18,Male,Accra,Urban,Secondary,,,123,111,No,No,0,No,Yes,ACC-4,123,30.8,No,Fair,CHPS compound\nGH-0145,44,Female,Cape Coast,Urban,Primary,Moderate,32.5,120,104,No,No,0,Yes,Yes,CAP-1,99,12.2,No,Good,CHPS compound\nGH-0146,35,Female,Tamale,Rural,Primary,Low,25.8,120,128,No,No,0,No,No,TAM-3,102,20.6,No,Fair,CHPS compound\nGH-0147,44,Male,Tamale,Urban,None,High,21.5,113,126,No,Yes,2,No,No,TAM-2,95,13.4,Yes,Good,Hospital\nGH-0148,36,Male,Accra,Urban,Primary,Moderate,22.8,123,112,No,Yes,2,No,Yes,ACC-4,105,25.3,No,Poor,Hospital\nGH-0149,55,Male,Tamale,Rural,,Moderate,14.4,125,122,No,Yes,1,Yes,Yes,TAM-4,104,19.3,No,Good,CHPS compound\nGH-0150,45,Male,Accra,Urban,Primary,Moderate,13.7,116,,No,No,2,Yes,Yes,ACC-1,106,14.1,No,Very good,Hospital\nGH-0151,55,Male,Cape Coast,Rural,None,Moderate,18.1,129,118,No,No,2,No,Yes,CAP-4,123,34.7,No,Poor,Pharmacy\nGH-0152,56,Male,Accra,Urban,None,Low,35.2,148,134,Yes,No,1,No,No,ACC-1,137,6.4,Yes,Poor,Pharmacy\nGH-0153,39,Male,Kumasi,Urban,Primary,Moderate,20.7,97,90,No,Yes,1,Yes,Yes,KUM-2,97,14.0,No,Good,Hospital\nGH-0154,57,Male,Tamale,Rural,Primary,Low,30.0,122,116,No,No,1,No,No,TAM-4,118,21.2,No,Poor,Hospital\nGH-0155,49,Female,Kumasi,Urban,Primary,Moderate,17.7,129,138,No,No,1,Yes,Yes,KUM-3,129,25.0,No,Fair,CHPS compound\nGH-0156,32,Female,Tamale,Rural,Secondary,Low,25.6,113,,No,No,0,No,No,TAM-2,99,29.0,No,Fair,CHPS compound\nGH-0157,44,Female,Ho,Urban,Primary,Low,43.1,149,,Yes,No,1,No,Yes,HO-2,138,7.7,Yes,Poor,Pharmacy\nGH-0158,47,Female,Accra,Urban,Primary,Low,21.1,141,113,Yes,No,7,No,No,ACC-1,123,17.6,No,Good,CHPS compound\nGH-0159,63,Female,Tamale,Rural,Primary,Low,15.4,143,138,Yes,No,2,Yes,Yes,TAM-2,128,12.3,No,Good,CHPS compound\nGH-0160,41,Male,Ho,Rural,Secondary,Moderate,31.2,144,138,Yes,Yes,1,Yes,No,HO-4,131,10.3,No,Good,CHPS compound\nGH-0161,66,Male,Kumasi,Rural,None,High,30.7,149,138,Yes,No,2,No,No,KUM-1,136,7.0,Yes,Fair,Hospital\nGH-0162,56,Female,Accra,Urban,Secondary,Low,,159,165,Yes,No,2,No,No,ACC-4,149,7.9,No,Very good,Hospital\nGH-0163,19,Female,Accra,Rural,Secondary,Moderate,30.2,107,108,No,No,3,No,No,ACC-4,111,31.7,No,Good,CHPS compound\nGH-0164,33,Male,Ho,Rural,Primary,High,24.3,126,115,No,No,1,No,No,HO-4,142,31.4,No,Fair,Pharmacy\nGH-0165,54,Female,Accra,Rural,None,Moderate,19.9,122,115,No,No,0,No,No,ACC-4,116,33.1,No,Good,CHPS compound\nGH-0166,27,Male,Tamale,Rural,Secondary,Moderate,35.5,121,121,No,No,0,Yes,Yes,TAM-1,114,7.5,Yes,Good,CHPS compound\nGH-0167,52,Female,Cape Coast,Rural,Secondary,Moderate,7.4,103,,No,No,2,Yes,Yes,CAP-4,111,20.0,No,Fair,Hospital\nGH-0168,64,Male,Tamale,Urban,Secondary,Moderate,12.5,132,139,No,No,2,No,No,TAM-3,109,19.2,Yes,Very good,Pharmacy\nGH-0169,43,Female,Tamale,Rural,None,High,27.0,109,108,No,No,2,Yes,Yes,TAM-4,109,12.4,No,Poor,Hospital\nGH-0170,64,Female,Kumasi,Urban,Secondary,Low,36.1,117,103,No,Yes,2,No,No,KUM-3,102,15.0,No,Poor,Hospital\nGH-0171,63,Female,Tamale,Urban,Primary,Low,24.4,144,145,Yes,No,10,Yes,Yes,TAM-1,132,16.1,No,Good,Hospital\nGH-0172,45,Male,Accra,Urban,None,High,27.7,139,141,No,Yes,0,No,No,ACC-1,115,21.5,No,Poor,CHPS compound\nGH-0173,46,Male,Kumasi,Urban,Secondary,Moderate,28.6,142,142,Yes,Yes,1,No,Yes,KUM-2,151,6.2,Yes,Fair,Hospital\nGH-0174,48,Female,Cape Coast,Rural,Secondary,Moderate,37.3,136,142,No,No,1,Yes,Yes,CAP-4,122,34.2,No,Fair,Hospital\nGH-0175,52,Female,Cape Coast,Urban,Secondary,High,34.0,146,136,Yes,No,0,Yes,Yes,CAP-3,143,17.0,Yes,Poor,Pharmacy\nGH-0176,26,Female,Tamale,Rural,Primary,High,29.3,115,125,No,No,3,No,No,TAM-1,114,12.8,Yes,Good,CHPS compound\nGH-0177,44,Male,Cape Coast,Urban,Primary,High,19.7,119,123,No,No,0,No,Yes,CAP-1,103,33.0,No,Very good,Hospital\nGH-0178,24,Female,Tamale,Urban,Primary,Low,34.6,105,98,No,No,0,Yes,No,TAM-3,104,16.4,No,Fair,Pharmacy\nGH-0179,42,Male,Ho,Urban,Primary,Moderate,33.8,157,171,Yes,No,0,No,No,HO-3,146,21.9,No,Good,Hospital\nGH-0180,43,Female,Accra,Urban,Primary,High,26.7,116,98,No,No,2,No,Yes,ACC-2,107,31.1,Yes,Very good,Pharmacy\nGH-0181,22,Female,Ho,Rural,None,Moderate,32.8,139,123,No,No,2,Yes,Yes,HO-3,127,24.5,Yes,Very good,CHPS compound\nGH-0182,30,Male,Ho,Rural,Tertiary,Moderate,16.2,96,91,No,No,1,No,No,HO-4,95,17.4,No,Poor,Hospital\nGH-0183,41,Female,Cape Coast,Rural,Secondary,High,,116,100,No,No,0,No,Yes,CAP-3,117,11.7,Yes,Very good,Hospital\nGH-0184,74,Female,Cape Coast,Rural,Secondary,Moderate,33.1,163,156,Yes,No,4,No,No,CAP-3,163,15.8,No,Very good,CHPS compound\nGH-0185,28,Male,Accra,Urban,Primary,Low,,127,117,No,Yes,0,Yes,Yes,ACC-4,107,19.6,No,Good,Hospital\nGH-0186,48,Female,Kumasi,Rural,Primary,Moderate,39.4,144,129,Yes,No,1,No,No,KUM-4,125,35.5,No,Very good,Pharmacy\nGH-0187,34,Male,Ho,Rural,Secondary,High,18.0,107,82,No,No,2,No,No,HO-4,105,1.6,Yes,Very good,CHPS compound\nGH-0188,41,Female,Tamale,Rural,Tertiary,Moderate,23.1,133,126,No,No,3,Yes,Yes,TAM-1,136,35.7,No,Very good,CHPS compound\nGH-0189,59,Male,Kumasi,Urban,Secondary,Moderate,37.4,135,109,No,No,1,No,No,KUM-3,141,24.5,No,Very good,CHPS compound\nGH-0190,50,Male,Accra,Urban,None,Moderate,31.4,140,125,Yes,No,4,No,No,ACC-3,133,12.0,No,Good,Hospital\nGH-0191,52,Male,Tamale,Urban,Secondary,Low,19.2,114,95,No,No,2,No,No,TAM-2,102,0.6,Yes,Fair,CHPS compound\nGH-0192,52,Female,Kumasi,Urban,Primary,Moderate,22.0,146,141,Yes,No,0,No,No,KUM-2,138,5.0,Yes,Poor,CHPS compound\nGH-0193,53,Male,Kumasi,Rural,None,Moderate,8.8,122,114,No,No,8,No,No,KUM-1,132,12.9,No,Fair,CHPS compound\nGH-0194,18,Male,Kumasi,Urban,,High,24.3,133,108,No,No,3,No,Yes,KUM-3,129,11.1,No,Good,Hospital\nGH-0195,51,Male,Kumasi,Rural,Tertiary,Moderate,39.9,142,143,Yes,No,2,No,No,KUM-2,132,0.5,Yes,Fair,CHPS compound\nGH-0196,45,Male,Kumasi,Urban,Primary,High,34.9,131,137,No,No,0,No,No,KUM-2,134,13.4,No,Very good,CHPS compound\nGH-0197,51,Female,Cape Coast,Urban,Secondary,Low,13.1,97,71,No,No,0,No,Yes,CAP-2,93,3.2,Yes,Very good,Hospital\nGH-0198,57,Male,Tamale,Rural,Primary,Low,22.0,132,146,No,No,2,No,No,TAM-2,130,9.4,No,Fair,CHPS compound\nGH-0199,51,Female,Accra,Urban,None,High,17.1,139,126,No,No,2,No,No,ACC-4,123,6.3,Yes,Very good,Hospital\nGH-0200,55,Female,Accra,Urban,Secondary,Moderate,38.1,149,151,Yes,No,2,Yes,Yes,ACC-2,151,9.3,Yes,Good,Hospital\nGH-0201,31,Male,Ho,Urban,Primary,High,19.4,109,106,No,Yes,1,Yes,Yes,HO-4,112,15.9,No,Very good,Hospital\nGH-0202,52,Male,Kumasi,Rural,None,Moderate,52.3,150,,Yes,No,2,No,No,KUM-2,146,23.7,No,Good,CHPS compound\nGH-0203,45,Male,Tamale,Urban,Secondary,Low,16.0,111,108,No,No,6,No,Yes,TAM-3,99,24.5,No,Very good,Hospital\nGH-0204,45,Female,Ho,Urban,Secondary,Moderate,18.5,118,126,No,No,4,No,No,HO-3,125,35.9,No,Fair,Hospital\nGH-0205,63,Male,Ho,Urban,Primary,Low,18.8,138,134,No,No,1,No,Yes,HO-2,128,15.6,No,Poor,CHPS compound\nGH-0206,40,Male,Ho,Rural,None,Low,29.4,128,120,No,No,0,Yes,Yes,HO-4,117,24.1,No,Fair,Hospital\nGH-0207,37,Female,Tamale,Urban,Secondary,Moderate,32.6,136,145,No,No,0,No,Yes,TAM-2,125,15.1,No,Very good,CHPS compound\nGH-0208,29,Male,Tamale,Rural,Secondary,High,14.8,119,106,No,Yes,1,Yes,No,TAM-1,103,3.3,Yes,Fair,CHPS compound\nGH-0209,42,Male,Cape Coast,Urban,None,Moderate,39.0,125,112,No,No,0,No,Yes,CAP-4,133,22.7,No,Good,CHPS compound\nGH-0210,60,Female,Cape Coast,Urban,Secondary,Moderate,26.8,135,150,No,No,0,No,Yes,CAP-4,117,14.9,No,Good,Pharmacy\nGH-0211,24,Female,Tamale,Urban,Primary,Moderate,28.8,103,103,No,Yes,3,Yes,Yes,TAM-1,104,24.4,Yes,Very good,Pharmacy\nGH-0212,49,Male,Kumasi,Urban,Secondary,High,27.3,136,139,No,No,3,No,No,KUM-4,109,26.8,No,Poor,CHPS compound\nGH-0213,18,Male,Accra,Urban,Tertiary,High,,112,75,No,No,1,No,No,ACC-3,101,25.2,No,Fair,Hospital\nGH-0214,37,Male,Accra,Rural,None,Moderate,23.0,111,107,No,No,0,No,No,ACC-3,103,2.7,Yes,Poor,CHPS compound\nGH-0215,52,Male,Tamale,Rural,Primary,Moderate,9.7,100,109,No,No,1,Yes,Yes,TAM-1,106,12.8,Yes,Fair,Pharmacy\nGH-0216,39,Male,Accra,Rural,Secondary,Low,26.9,126,120,No,No,0,No,No,ACC-4,122,34.6,No,Very good,CHPS compound\nGH-0217,30,Male,Accra,Urban,Tertiary,High,27.4,123,131,No,No,2,No,Yes,ACC-1,118,25.2,No,Very good,CHPS compound\nGH-0218,41,Male,Cape Coast,Rural,Secondary,Moderate,30.1,145,148,Yes,No,3,Yes,Yes,CAP-1,135,10.6,Yes,Good,CHPS compound\nGH-0219,59,Female,Kumasi,Urban,Secondary,Low,28.4,124,108,No,No,2,Yes,Yes,KUM-3,110,12.7,Yes,Fair,CHPS compound\nGH-0220,65,Female,Tamale,Rural,,Low,41.7,169,165,Yes,No,2,No,No,TAM-4,168,11.1,No,Poor,CHPS compound\nGH-0221,66,Male,Accra,Urban,None,Low,24.8,145,140,Yes,No,1,No,Yes,ACC-1,118,28.9,No,Fair,Hospital\nGH-0222,55,Female,Kumasi,Urban,Secondary,Moderate,27.2,112,98,No,No,1,Yes,Yes,KUM-2,116,7.6,Yes,Good,Hospital\nGH-0223,51,Female,Kumasi,Urban,Secondary,Moderate,43.3,135,113,No,No,5,Yes,Yes,KUM-4,124,9.5,No,Fair,CHPS compound\nGH-0224,59,Female,Kumasi,Urban,Primary,Low,30.1,135,,No,No,2,Yes,No,KUM-1,131,11.8,No,Fair,Hospital\nGH-0225,31,Female,Accra,Rural,Secondary,High,26.7,120,126,No,No,4,No,No,ACC-3,117,11.1,No,Good,CHPS compound\nGH-0226,33,Male,Accra,Urban,Primary,Low,35.8,117,113,No,Yes,4,No,No,ACC-2,110,20.1,Yes,Good,Hospital\nGH-0227,63,Male,Kumasi,Urban,None,Low,19.8,107,100,No,No,1,Yes,Yes,KUM-1,107,8.4,No,Fair,CHPS compound\nGH-0228,57,Female,Cape Coast,Rural,Primary,High,20.3,126,123,No,No,1,Yes,Yes,CAP-4,131,11.6,No,Fair,CHPS compound\nGH-0229,57,Male,Kumasi,Urban,None,Moderate,24.4,131,,No,No,4,Yes,Yes,KUM-3,116,13.9,No,Fair,Hospital\nGH-0230,49,Female,Cape Coast,Rural,Secondary,High,27.8,140,142,Yes,No,4,No,Yes,CAP-3,140,3.4,Yes,Fair,CHPS compound\nGH-0231,35,Male,Tamale,Rural,Tertiary,High,29.8,132,111,No,No,1,No,Yes,TAM-2,125,12.4,No,Very good,CHPS compound\nGH-0232,32,Male,Tamale,Urban,None,High,23.8,109,100,No,Yes,4,No,Yes,TAM-4,106,33.8,No,Fair,Hospital\nGH-0233,58,Female,Cape Coast,Rural,Tertiary,Moderate,39.6,155,166,Yes,No,4,No,No,CAP-3,146,3.2,Yes,Very good,CHPS compound\nGH-0234,60,Female,Kumasi,Urban,Primary,Moderate,17.5,118,114,No,No,0,No,No,KUM-3,117,25.1,No,Fair,Hospital\nGH-0235,31,Male,Kumasi,Urban,None,Low,25.7,130,119,No,No,4,No,Yes,KUM-2,131,20.5,No,Fair,Hospital\nGH-0236,36,Female,Accra,Urban,Primary,Moderate,14.7,104,96,No,No,1,No,Yes,ACC-3,89,10.3,No,Good,Hospital\nGH-0237,45,Male,Accra,Rural,Primary,Low,16.5,110,91,No,No,1,Yes,Yes,ACC-1,85,16.0,No,Fair,Pharmacy\nGH-0238,57,Male,Kumasi,Urban,Secondary,Low,16.8,124,129,No,No,0,Yes,Yes,KUM-4,102,26.9,No,Very good,Hospital\nGH-0239,42,Male,Accra,Urban,Secondary,Moderate,,138,148,No,No,1,Yes,Yes,ACC-4,120,23.3,No,Poor,Hospital\nGH-0240,35,Male,Accra,Urban,None,Low,32.5,130,,No,No,0,No,Yes,ACC-3,118,13.8,No,Poor,Hospital\nGH-0241,59,Female,Ho,Rural,Primary,Moderate,29.1,119,,No,No,1,No,No,HO-4,122,20.8,No,Good,Hospital\nGH-0242,54,Male,Cape Coast,Rural,Secondary,High,31.6,154,153,Yes,No,3,No,Yes,CAP-2,149,3.5,Yes,Good,Pharmacy\nGH-0243,37,Female,Cape Coast,Urban,Primary,Moderate,32.0,118,106,No,No,1,No,Yes,CAP-4,126,10.6,No,Fair,CHPS compound\nGH-0244,37,Female,Kumasi,Rural,Secondary,Moderate,29.8,106,111,No,No,2,No,No,KUM-3,107,5.0,Yes,Fair,CHPS compound\nGH-0245,60,Male,Tamale,Urban,None,Low,18.5,105,113,No,No,1,No,Yes,TAM-3,86,13.7,No,Poor,Hospital\nGH-0246,29,Female,Tamale,Rural,Secondary,Moderate,31.7,138,144,No,No,1,No,Yes,TAM-4,130,16.2,No,Good,Hospital\nGH-0247,42,Female,Kumasi,Urban,Primary,Low,13.5,130,119,No,No,1,No,Yes,KUM-2,137,28.5,No,Fair,Hospital\nGH-0248,52,Male,Tamale,Urban,None,Low,39.9,135,132,No,No,4,No,No,TAM-2,117,6.6,No,Good,Pharmacy\nGH-0249,48,Male,Tamale,Rural,Primary,Low,55.4,150,153,Yes,No,2,Yes,Yes,TAM-2,142,25.5,No,Very good,Hospital\nGH-0250,58,Female,Tamale,Rural,Secondary,Moderate,15.8,123,138,No,No,1,No,No,TAM-2,99,9.1,No,Poor,CHPS compound\nGH-0251,24,Male,Cape Coast,Rural,Secondary,High,41.1,118,108,No,No,1,No,No,CAP-4,118,4.5,Yes,Good,Hospital\nGH-0252,46,Male,Tamale,Urban,Primary,Moderate,27.1,132,138,No,No,0,Yes,Yes,TAM-1,116,8.9,No,Poor,Hospital\nGH-0253,50,Male,Tamale,Urban,Primary,High,30.6,146,136,Yes,No,2,Yes,Yes,TAM-2,139,3.4,Yes,Fair,Pharmacy\nGH-0254,50,Male,Cape Coast,Urban,Primary,High,,154,154,Yes,Yes,2,No,No,CAP-1,145,19.5,Yes,Very good,Hospital\nGH-0255,53,Female,Kumasi,Urban,Primary,Moderate,24.0,131,124,No,No,4,No,No,KUM-4,125,3.9,Yes,Poor,Hospital\nGH-0256,31,Female,Ho,Urban,,High,34.2,123,125,No,No,0,No,No,HO-1,123,16.0,No,Very good,CHPS compound\nGH-0257,65,Female,Accra,Urban,Secondary,Moderate,27.8,151,144,Yes,No,4,No,Yes,ACC-1,134,7.8,Yes,Good,CHPS compound\nGH-0258,52,Female,Cape Coast,Urban,Primary,Low,40.4,128,143,No,No,1,Yes,Yes,CAP-1,113,31.1,No,Fair,Hospital\nGH-0259,53,Female,Cape Coast,Urban,None,High,22.5,124,127,No,No,1,No,No,CAP-1,99,19.0,No,Fair,Hospital\nGH-0260,39,Female,Kumasi,Rural,Primary,Moderate,34.9,148,139,Yes,No,0,Yes,Yes,KUM-3,139,11.2,Yes,Poor,CHPS compound\nGH-0261,48,Female,Cape Coast,Rural,Secondary,High,25.6,132,114,No,No,2,No,No,CAP-1,127,27.3,No,Good,CHPS compound\nGH-0262,63,Female,Kumasi,Rural,Primary,,38.5,175,167,Yes,No,6,No,No,KUM-3,171,6.8,No,Fair,Hospital\nGH-0263,46,Male,Accra,Urban,Secondary,High,16.1,133,135,No,No,0,Yes,Yes,ACC-2,146,12.8,Yes,Very good,CHPS compound\nGH-0264,49,Male,Ho,Urban,None,Low,29.9,147,149,Yes,No,5,No,No,HO-2,127,9.7,Yes,Good,Hospital\nGH-0265,50,Female,Kumasi,Urban,None,Low,29.1,137,132,No,No,3,No,No,KUM-1,139,20.4,No,Fair,Hospital\nGH-0266,25,Male,Tamale,Rural,Secondary,Moderate,41.4,121,128,No,Yes,1,No,Yes,TAM-3,105,17.5,No,Fair,CHPS compound\nGH-0267,44,Male,Kumasi,Rural,Secondary,Moderate,26.8,141,127,Yes,No,0,No,No,KUM-3,140,15.8,No,Poor,CHPS compound\nGH-0268,55,Female,Tamale,Rural,None,Moderate,33.7,125,102,No,No,1,Yes,Yes,TAM-4,122,15.6,Yes,Fair,CHPS compound\nGH-0269,40,Male,Cape Coast,Rural,Tertiary,Moderate,15.3,95,96,No,No,0,No,No,CAP-4,108,20.3,No,Fair,Hospital\nGH-0270,45,Male,Kumasi,Urban,Tertiary,Low,26.5,131,148,No,No,0,Yes,Yes,KUM-1,130,31.8,No,Very good,Hospital\nGH-0271,46,Female,Tamale,Urban,Secondary,High,21.0,138,141,No,No,2,Yes,Yes,TAM-2,124,1.1,Yes,Very good,CHPS compound\nGH-0272,25,Male,Cape Coast,Rural,Primary,High,24.6,136,134,No,Yes,0,Yes,Yes,CAP-3,129,19.2,No,Fair,Hospital\nGH-0273,56,Male,Cape Coast,Urban,Primary,Low,17.6,130,131,No,No,1,No,No,CAP-2,114,8.0,No,Good,Pharmacy\nGH-0274,28,Female,Ho,Urban,Primary,Moderate,30.8,119,104,No,No,1,No,Yes,HO-1,108,6.7,No,Poor,CHPS compound\nGH-0275,51,Male,Accra,Urban,Secondary,High,33.0,140,127,Yes,No,4,No,No,ACC-3,110,9.1,No,Poor,CHPS compound\nGH-0276,44,Male,Kumasi,Urban,Primary,Moderate,26.2,135,139,No,No,0,No,No,KUM-2,153,23.1,Yes,Fair,Hospital\nGH-0277,42,Male,Tamale,Urban,Secondary,Moderate,23.7,138,123,No,No,2,No,No,TAM-1,119,14.1,No,Poor,Hospital\nGH-0278,47,Female,Tamale,Urban,Tertiary,High,26.7,131,111,No,No,0,Yes,Yes,TAM-4,120,12.2,Yes,Very good,Hospital\nGH-0279,56,Male,Accra,Urban,Secondary,High,33.5,153,164,Yes,No,0,No,No,ACC-1,131,20.3,Yes,Very good,CHPS compound\nGH-0280,57,Male,Accra,Urban,None,Moderate,29.9,153,151,Yes,Yes,2,No,No,ACC-2,155,17.4,No,Very good,Pharmacy\nGH-0281,40,Female,Ho,Rural,Primary,High,25.8,141,136,Yes,No,4,No,Yes,HO-3,136,22.8,No,Good,Hospital\nGH-0282,44,Female,Tamale,Urban,None,Low,17.9,130,113,No,No,2,No,No,TAM-2,109,30.7,No,Poor,Hospital\nGH-0283,35,Male,Tamale,Rural,Secondary,High,33.9,144,154,Yes,No,1,Yes,Yes,TAM-2,124,24.8,No,Very good,Hospital\nGH-0284,27,Female,Ho,Rural,Primary,Low,30.8,140,,Yes,No,1,No,No,HO-2,141,26.0,No,Very good,CHPS compound\nGH-0285,58,Female,Cape Coast,Rural,Primary,Moderate,22.6,118,120,No,No,1,Yes,Yes,CAP-4,123,18.1,Yes,Good,Hospital\nGH-0286,32,Female,Cape Coast,Urban,None,Moderate,32.9,146,150,Yes,No,1,Yes,Yes,CAP-4,152,23.7,No,Fair,Hospital\nGH-0287,36,Female,Ho,Urban,Secondary,Moderate,17.2,113,111,No,No,1,Yes,Yes,HO-1,119,15.2,No,Fair,Hospital\nGH-0288,51,Male,Cape Coast,Urban,Secondary,High,20.0,110,99,No,Yes,1,No,No,CAP-3,116,6.4,No,Good,Hospital\nGH-0289,28,Female,Kumasi,Urban,,Moderate,43.9,134,124,No,No,0,Yes,Yes,KUM-4,131,14.1,No,Very good,Hospital\nGH-0290,52,Female,Ho,Urban,None,High,36.2,146,130,Yes,No,2,No,Yes,HO-3,132,21.7,Yes,Good,Hospital\nGH-0291,35,Female,Accra,Urban,Secondary,Low,20.8,95,96,No,No,0,No,Yes,ACC-3,79,32.5,No,Fair,CHPS compound\nGH-0292,31,Male,Accra,Urban,Tertiary,Moderate,38.1,132,127,No,No,1,No,No,ACC-4,127,8.6,No,Good,Pharmacy\nGH-0293,38,Female,Cape Coast,Urban,Tertiary,Low,26.0,90,81,No,No,2,No,No,CAP-1,81,10.5,No,Fair,CHPS compound\nGH-0294,35,Male,Accra,Urban,Tertiary,Low,,138,121,No,No,1,No,Yes,ACC-3,141,15.5,Yes,Very good,CHPS compound\nGH-0295,49,Female,Ho,Urban,Tertiary,Moderate,50.4,146,,Yes,No,3,No,No,HO-4,144,15.1,No,Very good,Hospital\nGH-0296,64,Female,Kumasi,Rural,Secondary,High,17.2,131,127,No,No,2,No,No,KUM-3,143,16.6,No,Fair,Pharmacy\nGH-0297,55,Male,Tamale,Urban,None,Moderate,31.6,151,156,Yes,No,3,No,No,TAM-1,145,4.8,Yes,Good,CHPS compound\nGH-0298,52,Male,Tamale,Urban,Tertiary,Moderate,17.5,125,117,No,Yes,3,Yes,Yes,TAM-3,112,18.3,Yes,Fair,Hospital\nGH-0299,38,Male,Kumasi,Urban,Primary,High,20.0,106,116,No,No,1,No,No,KUM-4,103,11.4,Yes,Good,CHPS compound\nGH-0300,43,Female,Ho,Urban,Primary,Low,33.9,104,111,No,No,0,No,Yes,HO-1,117,14.4,Yes,Good,CHPS compound\nGH-0301,47,Male,Ho,Rural,Tertiary,High,16.0,132,128,No,No,3,Yes,No,HO-3,134,22.2,No,Poor,CHPS compound\nGH-0302,45,Male,Accra,Urban,Tertiary,High,25.4,142,148,Yes,No,9,Yes,Yes,ACC-4,126,7.8,No,Very good,Hospital\nGH-0303,48,Male,Tamale,Rural,Primary,Moderate,11.9,112,105,No,No,0,No,No,TAM-3,94,32.7,No,Poor,Hospital\nGH-0304,30,Male,Kumasi,Urban,Tertiary,Moderate,34.1,101,105,No,No,2,Yes,Yes,KUM-1,97,17.4,No,Good,Pharmacy\nGH-0305,69,Male,Tamale,Urban,None,High,29.2,152,169,Yes,Yes,7,No,No,TAM-3,137,22.6,Yes,Poor,Hospital\nGH-0306,28,Male,Accra,Urban,Primary,High,15.9,113,116,No,No,1,Yes,Yes,ACC-4,103,26.0,No,Poor,Hospital\nGH-0307,44,Male,Kumasi,Urban,None,Moderate,23.8,134,120,No,No,2,No,No,KUM-2,132,12.7,Yes,Fair,CHPS compound\nGH-0308,56,Male,Accra,Rural,Secondary,Moderate,20.1,119,111,No,No,2,Yes,Yes,ACC-1,113,20.9,Yes,Poor,CHPS compound\nGH-0309,36,Male,Accra,Rural,None,Moderate,19.0,90,,No,No,0,No,Yes,ACC-1,72,8.0,No,Very good,Hospital\nGH-0310,59,Female,Tamale,Urban,Secondary,Moderate,27.3,127,148,No,No,2,No,Yes,TAM-2,113,12.5,No,Good,Hospital\nGH-0311,27,Female,Tamale,Rural,Primary,Low,20.3,118,119,No,Yes,1,Yes,Yes,TAM-1,113,33.1,No,Poor,CHPS compound\nGH-0312,36,Male,Cape Coast,Rural,Primary,High,37.0,150,141,Yes,No,4,Yes,Yes,CAP-1,139,9.0,No,Very good,CHPS compound\nGH-0313,18,Male,Kumasi,Urban,Secondary,Moderate,26.4,109,107,No,No,0,Yes,Yes,KUM-2,114,6.9,Yes,Very good,Hospital\nGH-0314,59,Female,Cape Coast,Rural,Secondary,Moderate,14.8,116,105,No,No,1,No,No,CAP-4,113,1.3,Yes,Poor,CHPS compound\nGH-0315,30,Female,Cape Coast,Urban,Primary,Moderate,13.6,82,73,No,No,0,Yes,Yes,CAP-1,61,19.6,No,Good,CHPS compound\nGH-0316,36,Female,Tamale,Urban,Primary,Moderate,16.9,128,,No,No,2,No,No,TAM-3,122,7.5,No,Fair,Hospital\nGH-0317,55,Female,Accra,Urban,Secondary,Moderate,27.8,126,113,No,No,2,Yes,Yes,ACC-4,114,31.7,No,Good,Hospital\nGH-0318,50,Male,Kumasi,Urban,Secondary,Moderate,39.1,133,115,No,No,4,No,No,KUM-4,125,22.2,Yes,Good,Hospital\nGH-0319,59,Male,Tamale,Rural,Tertiary,Low,20.9,117,106,No,No,2,No,No,TAM-1,122,22.5,No,Very good,CHPS compound\nGH-0320,54,Female,Tamale,Rural,None,Moderate,13.3,114,104,No,No,3,Yes,Yes,TAM-2,96,11.0,No,Poor,CHPS compound\nGH-0321,57,Male,Cape Coast,Rural,Tertiary,High,10.8,130,137,No,No,1,Yes,Yes,CAP-3,131,19.9,Yes,Good,Hospital\nGH-0322,39,Female,Ho,Rural,Tertiary,Low,30.0,118,113,No,No,1,No,Yes,HO-3,122,29.0,No,Very good,CHPS compound\nGH-0323,44,Male,Accra,Urban,Tertiary,Moderate,22.9,142,135,Yes,No,1,Yes,Yes,ACC-3,120,12.9,No,Good,Hospital\nGH-0324,55,Female,Ho,Rural,Primary,Moderate,26.0,139,144,No,No,2,Yes,Yes,HO-1,137,2.0,Yes,Fair,Hospital\nGH-0325,55,Male,Kumasi,Urban,Secondary,Moderate,22.2,135,134,No,Yes,2,No,No,KUM-3,139,28.8,Yes,Good,Hospital\nGH-0326,57,Female,Ho,Urban,Primary,Low,32.8,152,,Yes,No,2,Yes,Yes,HO-2,139,33.0,No,Very good,CHPS compound\nGH-0327,35,Male,Accra,Rural,Secondary,High,33.0,117,102,No,Yes,2,No,Yes,ACC-2,116,21.1,No,Fair,Hospital\nGH-0328,31,Female,Kumasi,Urban,Primary,Low,27.2,118,123,No,No,4,Yes,Yes,KUM-3,111,10.3,No,Fair,CHPS compound\nGH-0329,29,Female,Cape Coast,Rural,Secondary,Low,27.8,126,120,No,Yes,0,No,No,CAP-3,121,25.3,No,Fair,CHPS compound\nGH-0330,39,Male,Ho,Urban,None,Low,21.4,129,125,No,No,1,No,No,HO-4,136,20.3,No,Fair,Hospital\nGH-0331,44,Male,Accra,Urban,Primary,Moderate,37.2,132,123,No,Yes,0,Yes,Yes,ACC-1,127,2.7,Yes,Fair,CHPS compound\nGH-0332,30,Female,Cape Coast,Rural,Primary,Moderate,21.8,98,94,No,No,0,No,Yes,CAP-1,82,18.3,No,Fair,CHPS compound\nGH-0333,43,Male,Accra,Urban,None,Moderate,17.8,96,100,No,No,1,Yes,Yes,ACC-4,99,7.8,No,Very good,CHPS compound\nGH-0334,53,Female,Ho,Rural,Primary,,39.1,151,145,Yes,No,0,No,No,HO-2,149,17.5,No,Poor,CHPS compound\nGH-0335,58,Female,Ho,Urban,Secondary,Moderate,34.8,139,117,No,No,1,No,Yes,HO-2,147,15.3,No,Good,CHPS compound\nGH-0336,38,Female,Accra,Urban,Secondary,Low,25.4,116,108,No,No,2,No,No,ACC-1,103,29.3,No,Good,Hospital\nGH-0337,53,Male,Ho,Rural,Secondary,Low,28.8,135,122,No,No,0,No,No,HO-1,136,33.9,No,Very good,CHPS compound\nGH-0338,29,Male,Kumasi,Rural,Tertiary,Low,9.4,101,112,No,No,1,No,No,KUM-2,106,17.0,No,Very good,Pharmacy\nGH-0339,37,Male,Cape Coast,Urban,Primary,Moderate,28.6,120,100,No,Yes,1,No,No,CAP-3,112,21.4,Yes,Fair,Pharmacy\nGH-0340,47,Male,Cape Coast,Urban,Secondary,High,32.5,148,133,Yes,No,1,Yes,Yes,CAP-1,132,13.4,No,Very good,Pharmacy\nGH-0341,37,Male,Cape Coast,Rural,None,Moderate,33.8,113,110,No,Yes,1,No,No,CAP-4,108,9.8,No,Fair,CHPS compound\nGH-0342,35,Male,Cape Coast,Urban,Secondary,Low,24.7,105,95,No,No,3,Yes,No,CAP-1,87,7.1,No,Poor,CHPS compound\nGH-0343,49,Female,Tamale,Rural,None,Moderate,21.5,106,86,No,No,3,No,No,TAM-2,85,21.7,No,Good,CHPS compound\nGH-0344,32,Male,Kumasi,Urban,None,Moderate,31.7,122,119,No,No,0,Yes,Yes,KUM-4,116,31.7,No,Very good,Hospital\nGH-0345,47,Male,Ho,Rural,,Low,22.1,131,137,No,No,1,No,No,HO-4,122,15.1,No,Very good,Hospital\nGH-0346,44,Female,Kumasi,Urban,Secondary,Moderate,26.1,115,104,No,No,1,Yes,Yes,KUM-1,112,18.5,Yes,Poor,CHPS compound\nGH-0347,52,Female,Kumasi,Urban,Primary,Low,14.3,118,116,No,No,3,No,No,KUM-3,113,27.0,No,Very good,Hospital\nGH-0348,55,Male,Tamale,Rural,Secondary,High,36.4,159,150,Yes,No,2,No,No,TAM-1,157,24.7,No,Fair,Hospital\nGH-0349,47,Female,Tamale,Rural,Primary,Moderate,26.3,150,149,Yes,No,0,No,Yes,TAM-3,140,24.1,No,Good,Hospital\nGH-0350,39,Male,Ho,Urban,Secondary,Moderate,28.1,138,148,No,No,2,No,No,HO-2,128,13.2,No,Good,Hospital\nGH-0351,58,Male,Tamale,Rural,Secondary,Moderate,35.4,137,137,No,No,4,Yes,Yes,TAM-2,134,32.5,No,Good,CHPS compound\nGH-0352,48,Male,Ho,Rural,None,Moderate,30.7,115,106,No,Yes,2,No,Yes,HO-4,121,7.5,Yes,Poor,CHPS compound\nGH-0353,34,Male,Tamale,Rural,Primary,High,20.7,89,95,No,Yes,0,No,No,TAM-4,96,36.0,No,Fair,CHPS compound\nGH-0354,47,Female,Accra,Urban,Primary,Low,15.0,106,,No,No,3,No,Yes,ACC-2,102,25.4,No,Poor,Hospital\nGH-0355,37,Female,Tamale,Rural,Secondary,Low,32.6,126,140,No,Yes,1,No,No,TAM-4,123,10.6,No,Very good,Pharmacy\nGH-0356,18,Male,Kumasi,Rural,Primary,Moderate,,98,102,No,No,0,Yes,Yes,KUM-4,85,25.3,No,Poor,Hospital\nGH-0357,33,Male,Accra,Urban,Secondary,Low,27.1,146,140,Yes,No,1,No,No,ACC-1,115,9.1,Yes,Good,Pharmacy\nGH-0358,40,Male,Kumasi,Urban,Secondary,Moderate,26.8,110,104,No,No,0,Yes,No,KUM-3,101,18.9,No,Poor,CHPS compound\nGH-0359,39,Male,Accra,Rural,Primary,Low,18.7,108,97,No,No,2,No,No,ACC-1,108,19.2,No,Good,CHPS compound\nGH-0360,25,Male,Kumasi,Urban,Primary,Moderate,33.2,94,89,No,No,1,No,No,KUM-2,106,6.1,Yes,Very good,Hospital\nGH-0361,41,Male,Kumasi,Urban,None,Moderate,32.2,147,128,Yes,No,3,No,Yes,KUM-1,136,29.9,Yes,Good,CHPS compound\nGH-0362,51,Male,Tamale,Rural,Secondary,Low,32.5,127,127,No,Yes,0,No,No,TAM-4,121,10.1,No,Poor,CHPS compound\nGH-0363,30,Male,Ho,Rural,Secondary,Low,18.6,87,78,No,No,1,No,No,HO-3,74,28.5,No,Fair,Pharmacy\nGH-0364,48,Male,Ho,Urban,,Moderate,29.9,131,133,No,No,1,No,Yes,HO-2,110,21.6,No,Very good,CHPS compound\nGH-0365,19,Female,Cape Coast,Rural,Secondary,Moderate,25.8,130,115,No,No,0,Yes,Yes,CAP-1,121,27.4,No,Very good,CHPS compound\nGH-0366,52,Male,Accra,Rural,Tertiary,Low,26.0,155,153,Yes,No,5,Yes,No,ACC-1,119,20.0,Yes,Good,CHPS compound\nGH-0367,38,Male,Cape Coast,Rural,Secondary,Moderate,27.0,122,121,No,No,0,Yes,Yes,CAP-2,117,10.4,No,Poor,Hospital\nGH-0368,28,Male,Tamale,Urban,None,Low,18.4,118,114,No,No,1,No,No,TAM-2,103,24.5,No,Good,Hospital\nGH-0369,60,Female,Cape Coast,Urban,Secondary,Moderate,27.1,129,133,No,No,0,Yes,Yes,CAP-1,107,23.8,No,Poor,Hospital\nGH-0370,51,Female,Tamale,Urban,Secondary,Moderate,12.4,113,112,No,No,1,Yes,Yes,TAM-1,83,17.3,No,Poor,Pharmacy\nGH-0371,57,Female,Accra,Urban,Primary,High,17.7,121,131,No,No,1,Yes,Yes,ACC-2,122,13.0,No,Good,Hospital\nGH-0372,49,Female,Tamale,Urban,Primary,High,24.1,150,,Yes,No,5,No,Yes,TAM-1,135,12.0,Yes,Fair,Pharmacy\nGH-0373,50,Female,Ho,Urban,None,Moderate,19.7,113,,No,No,1,No,Yes,HO-3,100,8.1,No,Poor,Hospital\nGH-0374,40,Female,Kumasi,Rural,Secondary,Moderate,30.9,101,91,No,No,2,Yes,Yes,KUM-1,97,18.2,No,Fair,Hospital\nGH-0375,51,Male,Cape Coast,Rural,None,Moderate,19.1,111,111,No,No,1,Yes,Yes,CAP-3,103,9.1,Yes,Good,CHPS compound\nGH-0376,44,Male,Tamale,Urban,Secondary,High,,142,150,Yes,No,6,No,Yes,TAM-1,147,24.4,No,Very good,CHPS compound\nGH-0377,37,Female,Cape Coast,Rural,Tertiary,Moderate,27.4,124,120,No,No,0,No,Yes,CAP-2,120,7.5,No,Good,CHPS compound\nGH-0378,43,Male,Accra,Urban,Secondary,Moderate,24.4,118,119,No,No,0,No,Yes,ACC-2,130,22.0,No,Fair,CHPS compound\nGH-0379,29,Female,Tamale,Urban,None,Low,21.2,112,116,No,No,0,Yes,Yes,TAM-3,93,27.1,Yes,Fair,Pharmacy\nGH-0380,45,Female,Kumasi,Urban,Secondary,Moderate,28.0,130,110,No,No,1,Yes,Yes,KUM-3,135,24.5,No,Very good,CHPS compound\nGH-0381,51,Male,Tamale,Urban,Secondary,Moderate,21.6,123,,No,Yes,3,Yes,Yes,TAM-3,111,14.6,No,Very good,Pharmacy\nGH-0382,47,Male,Kumasi,Urban,Secondary,Low,32.6,141,111,Yes,No,1,No,No,KUM-3,150,10.1,No,Very good,Pharmacy\nGH-0383,52,Male,Kumasi,Rural,Primary,Low,23.6,115,114,No,No,3,Yes,Yes,KUM-1,119,17.5,Yes,Good,Pharmacy\nGH-0384,41,Female,Tamale,Urban,Tertiary,Low,37.2,117,123,No,Yes,1,Yes,Yes,TAM-4,124,9.5,No,Good,CHPS compound\nGH-0385,45,Female,Accra,Urban,Secondary,Low,14.4,124,122,No,No,1,No,No,ACC-2,125,9.6,No,Fair,Hospital\nGH-0386,45,Female,Accra,Urban,Primary,Low,18.4,117,120,No,No,2,No,No,ACC-1,106,15.0,No,Good,CHPS compound\nGH-0387,70,Male,Accra,Rural,Primary,Low,22.5,99,88,No,No,3,Yes,Yes,ACC-4,93,10.1,Yes,Poor,Pharmacy\nGH-0388,28,Male,Cape Coast,Urban,None,High,34.3,124,125,No,No,0,No,No,CAP-1,99,32.8,Yes,Fair,Hospital\nGH-0389,71,Male,Kumasi,Rural,None,Low,19.2,141,137,Yes,No,1,No,No,KUM-3,126,13.8,Yes,Fair,CHPS compound\nGH-0390,36,Male,Tamale,Rural,None,Moderate,46.2,160,149,Yes,Yes,1,No,No,TAM-2,158,17.0,No,Good,CHPS compound\nGH-0391,41,Female,Ho,Rural,None,High,24.5,134,131,No,Yes,0,No,No,HO-1,147,34.1,No,Very good,Hospital\nGH-0392,49,Male,Accra,Urban,Tertiary,Moderate,39.6,147,141,Yes,Yes,1,No,No,ACC-4,134,6.3,Yes,Very good,Hospital\nGH-0393,53,Male,Kumasi,Urban,Secondary,High,37.1,159,160,Yes,Yes,2,Yes,Yes,KUM-1,154,8.9,Yes,Very good,Pharmacy\nGH-0394,45,Female,Accra,Urban,Primary,Low,34.9,144,131,Yes,No,0,Yes,Yes,ACC-2,141,28.5,No,Very good,CHPS compound\nGH-0395,48,Female,Kumasi,Rural,Secondary,High,19.0,139,120,No,No,2,Yes,Yes,KUM-2,138,4.5,Yes,Fair,Hospital\nGH-0396,63,Female,Ho,Urban,Tertiary,Moderate,55.4,147,145,Yes,No,2,Yes,Yes,HO-2,132,17.7,Yes,Very good,Pharmacy\nGH-0397,79,Male,Accra,Urban,Primary,Moderate,36.7,155,160,Yes,Yes,4,No,No,ACC-1,135,12.1,Yes,Very good,Pharmacy\nGH-0398,50,Male,Ho,Rural,Primary,Moderate,14.2,101,96,No,Yes,0,No,No,HO-1,99,0.5,Yes,Very good,Hospital\nGH-0399,54,Female,Kumasi,Rural,None,Low,17.6,134,114,No,No,1,No,Yes,KUM-1,131,6.5,No,Good,CHPS compound\nGH-0400,44,Male,Kumasi,Urban,None,Low,47.6,136,134,No,Yes,2,No,No,KUM-4,135,24.4,Yes,Good,Pharmacy\nGH-0401,67,Female,Tamale,Urban,None,Low,30.0,125,107,No,No,0,No,No,TAM-3,111,27.8,Yes,Very good,Hospital\nGH-0402,44,Male,Accra,Urban,Secondary,Moderate,29.7,154,158,Yes,Yes,5,Yes,No,ACC-3,140,6.8,Yes,Very good,Hospital\nGH-0403,52,Female,Accra,Urban,Secondary,,28.5,117,114,No,No,6,Yes,Yes,ACC-4,119,15.4,Yes,Good,CHPS compound\nGH-0404,32,Male,Tamale,Rural,Secondary,Moderate,41.1,129,115,No,No,0,Yes,Yes,TAM-3,102,12.7,No,Good,CHPS compound\nGH-0405,18,Female,Tamale,Urban,Secondary,Moderate,39.9,123,116,No,No,0,No,Yes,TAM-2,99,30.0,No,Very good,Pharmacy\nGH-0406,74,Male,Kumasi,Urban,None,Low,35.0,147,147,Yes,No,1,Yes,Yes,KUM-2,165,2.8,Yes,Fair,Hospital\nGH-0407,59,Female,Accra,Urban,Secondary,Moderate,18.2,140,120,Yes,No,3,No,No,ACC-3,128,20.1,No,Poor,Hospital\nGH-0408,57,Male,Ho,Urban,Tertiary,Low,57.9,169,165,Yes,No,3,Yes,Yes,HO-4,170,28.5,No,Very good,Hospital\nGH-0409,33,Male,Tamale,Rural,Secondary,High,15.5,103,98,No,Yes,2,No,No,TAM-1,89,12.1,Yes,Fair,Hospital\nGH-0410,24,Female,Ho,Rural,Secondary,High,10.6,113,111,No,No,0,Yes,Yes,HO-4,102,7.6,No,Very good,Pharmacy\nGH-0411,42,Male,Tamale,Urban,Secondary,Moderate,45.3,140,143,Yes,No,0,Yes,Yes,TAM-2,116,32.8,No,Very good,CHPS compound\nGH-0412,47,Female,Cape Coast,Rural,None,Low,17.9,109,103,No,No,3,No,No,CAP-3,103,15.8,No,Poor,CHPS compound\nGH-0413,54,Female,Cape Coast,Urban,Tertiary,Moderate,21.7,134,118,No,No,2,No,No,CAP-4,128,6.7,No,Fair,CHPS compound\nGH-0414,45,Female,Ho,Urban,Primary,Low,31.3,133,130,No,No,1,No,No,HO-3,120,27.4,No,Fair,Pharmacy\nGH-0415,62,Female,Accra,Urban,None,High,21.7,136,120,No,No,3,Yes,No,ACC-1,130,22.8,Yes,Fair,CHPS compound\nGH-0416,50,Female,Tamale,Urban,Secondary,Moderate,21.2,112,115,No,No,3,Yes,Yes,TAM-4,104,28.1,No,Good,Hospital\nGH-0417,49,Male,Ho,Urban,None,Moderate,24.3,130,124,No,No,2,Yes,Yes,HO-3,126,9.3,Yes,Very good,Pharmacy\nGH-0418,60,Female,Kumasi,Rural,,Low,30.8,119,109,No,No,3,No,Yes,KUM-4,109,28.5,No,Fair,Hospital\nGH-0419,37,Male,Tamale,Rural,Secondary,Moderate,24.2,132,123,No,No,3,Yes,No,TAM-1,123,17.8,No,Fair,CHPS compound\nGH-0420,50,Male,Kumasi,Rural,None,Low,37.2,134,131,No,No,0,Yes,Yes,KUM-1,134,21.7,No,Fair,CHPS compound\n";
 /* =====================================================================
    UI core: state, persistence, helpers, charts, code blocks, result card
    ===================================================================== */
@@ -2136,7 +2567,7 @@ const store = {
 };
 
 const S = {
-  section: store.get("section", "data"),
+  section: store.get("section", "chat"),
   tool: store.get("tool", { method: "question", data: "compare" }),
   codeLang: store.get("codeLang", "stata"),
   alpha: store.get("alpha", 0.05),
@@ -2303,6 +2734,17 @@ function chartHTML(c) {
     }).join("");
     const ly = m.t + c.rowLabels.length * (rowH + 8) + 12;
     return `<svg class="chart" viewBox="0 0 ${W} ${Hs}" role="img" aria-label="Row percentages">${rows}${c.colLabels.map((l, j) => `<rect x="${lw + j * 110}" y="${ly}" width="12" height="12" fill="${COLORS[j % COLORS.length]}" fill-opacity="${.25 + .6 * (j / Math.max(1, c.colLabels.length - 1))}"/><text x="${lw + j * 110 + 17}" y="${ly + 10}">${esc(String(l).slice(0, 14))}</text>`).join("")}</svg>`;
+  }
+  if (c.type === "km") {
+    const tmax = Math.max(...c.curves.flatMap(cv => cv.points.map(q => q[0]))), xt = niceTicks(0, tmax, 6), x1 = xt[xt.length - 1];
+    const x = v => m.l + v / x1 * iw, y = v => m.t + ih - v * ih;
+    const lines = c.curves.map((cv, i) => { let d = `M${x(0).toFixed(1)},${y(1).toFixed(1)}`; let prev = 1; cv.points.slice(1).forEach(([t, sv]) => { d += ` H${x(t).toFixed(1)} V${y(sv).toFixed(1)}`; prev = sv; }); d += ` H${x(tmax).toFixed(1)}`; return `<path d="${d}" fill="none" stroke="${COLORS[i % COLORS.length]}" stroke-width="2.2"/>`; }).join("");
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Kaplan–Meier survival curves">${axisY([0, .25, .5, .75, 1], y, m.l, W - m.r)}
+      ${xt.map(t => `<text x="${x(t)}" y="${H - m.b + 16}" text-anchor="middle">${fmtTick(t)}</text>`).join("")}${lines}
+      <line x1="${m.l}" x2="${W - m.r}" y1="${y(.5)}" y2="${y(.5)}" stroke="var(--ink-3)" stroke-dasharray="3 4"/>
+      ${c.curves.length > 1 ? c.curves.map((cv, i) => `<rect x="${m.l + 10 + i * 120}" y="${m.t + ih - 20}" width="12" height="3" fill="${COLORS[i % COLORS.length]}"/><text x="${m.l + 26 + i * 120}" y="${m.t + ih - 16}">${esc(String(cv.label).slice(0, 14))}</text>`).join("") : ""}
+      <text x="${m.l + iw / 2}" y="${H - 8}" text-anchor="middle">${esc(c.xlabel)}</text><text x="14" y="${m.t + ih / 2}" transform="rotate(-90 14 ${m.t + ih / 2})" text-anchor="middle">Proportion without the event</text></svg>
+      <p class="sub muted" style="font-size:.76rem">Each step down is an event; the dashed line marks 50% (median survival).</p>`;
   }
   if (c.type === "forest") {
     const rows = c.rows.filter(r => isFinite(r.lo) && isFinite(r.hi) && r.lo > 0);
@@ -2485,7 +2927,7 @@ function testCard(t, title, note) {
     ${codeBlock(t.code, { maxh: 220 })}</div>`;
 }
 function testResult(res) {
-  const runnable = ["student", "welch", "mwu", "paired_t", "wilcoxon", "anova", "welch_anova", "kruskal", "pearson", "spearman", "chi2", "fisher", "mcnemar", "linear", "logistic", "modpoisson", "poisson"].includes(res.id);
+  const runnable = ["student", "welch", "mwu", "paired_t", "wilcoxon", "anova", "welch_anova", "kruskal", "pearson", "spearman", "chi2", "fisher", "mcnemar", "linear", "logistic", "modpoisson", "poisson", "ordinal", "multinomial", "km", "cox"].includes(res.id);
   return `<article class="card stack" style="margin-top:1rem">${res.why.map(w => `<div class="notice info">${esc(w)}</div>`).join("")}
     ${testCard(res.test, "Recommended test")}
     ${res.variant ? `<hr class="sep">${testCard(res.variant.test, "If the variance or dispersion check fails", "Use this version when the equal-variance (or dispersion) assumption is not met.")}` : ""}
@@ -2515,7 +2957,8 @@ const DATA_TOOLS = [
   { id: "data", k: "01", label: "Data & variables", sub: "Upload, types, coding" },
   { id: "describe", k: "02", label: "Describe (Table 1)", sub: "Summary table by group" },
   { id: "compare", k: "03", label: "Compare & relate", sub: "Automatic test selection" },
-  { id: "regression", k: "04", label: "Regression", sub: "Linear, logistic, Poisson" },
+  { id: "regression", k: "04", label: "Regression", sub: "Linear, logistic, Poisson, ordinal, mixed" },
+  { id: "survival", k: "05", label: "Survival", sub: "Kaplan–Meier, log-rank, Cox" },
   { id: "export", k: "05", label: "Log & export", sub: "Scripts, data, report" },
   { id: "rules", k: "§", label: "Analysis rules", sub: "Every rule the app applies" },
 ];
@@ -2523,11 +2966,11 @@ const DATA_TOOLS = [
 /* ---------- dataset loading ---------- */
 function loadDataset(headers, rows, source, isExample) {
   S.raw = { headers, rows }; S.dsSource = source; S.isExample = !!isExample; S.overrides = isExample ? exampleOverrides() : {};
-  S.log = []; S.logSeq = 0; S.cur = { describe: null, compare: null, regression: null }; S.errors = {};
-  S.form = { describe: { vars: [], group: "" }, compare: { outcome: "", exposure: "", paired: false, force: "" }, regression: { outcome: "", preds: [], model: "auto" } };
+  S.log = []; S.logSeq = 0; S.cur = { describe: null, compare: null, regression: null, survival: null }; S.errors = {};
+  S.form = { describe: { vars: [], group: "" }, compare: { outcome: "", exposure: "", paired: false, force: "" }, regression: { outcome: "", preds: [], model: "auto", cluster: "" }, survival: { time: "", event: "", group: "", covs: [] } };
   rebuild();
 }
-function exampleOverrides() { return { education_level: { type: "ordinal", order: ["None", "Primary", "Secondary", "Tertiary"] }, salt_intake: { type: "ordinal", order: ["Low", "Moderate", "High"] } }; }
+function exampleOverrides() { return { education_level: { type: "ordinal", order: ["None", "Primary", "Secondary", "Tertiary"] }, salt_intake: { type: "ordinal", order: ["Low", "Moderate", "High"] }, self_rated_health: { type: "ordinal", order: ["Poor", "Fair", "Good", "Very good"] }, usual_source_of_care: { ref: "Hospital" } }; }
 function rebuild() {
   const codes = S.missingCodes.split(",").map(s => s.trim()).filter(Boolean);
   S.ds = Data.build(S.raw.headers, S.raw.rows, { missingCodes: codes });
@@ -2543,7 +2986,7 @@ function rerunLog() {
   const kept = [], dropped = [];
   S.log.forEach(e => { try { e.result = runAnalysis(e.kind, e.params); kept.push(e); } catch (err) { dropped.push(e); } });
   S.log = kept;
-  ["describe", "compare", "regression"].forEach(k => { if (S.cur[k] && !kept.includes(S.cur[k])) S.cur[k] = null; });
+  ["describe", "compare", "regression", "survival"].forEach(k => { if (S.cur[k] && !kept.includes(S.cur[k])) S.cur[k] = null; });
   if (kept.length) toast(`Re-ran ${kept.length} logged analys${kept.length === 1 ? "is" : "es"} with the new settings` + (dropped.length ? `; removed ${dropped.length} that no longer fit` : ""));
 }
 async function readFile(file) {
@@ -2577,7 +3020,17 @@ function runAnalysis(kind, p) {
   const opts = { alpha: S.alpha, force: p.force || undefined };
   if (kind === "describe") return Analysis.table1(S.ds, p.vars.map(V).filter(Boolean), p.group ? V(p.group) : null, opts);
   if (kind === "compare") { if (!V(p.outcome) || !V(p.exposure)) throw Object.assign(new Error("Choose both variables."), { user: true }); return Analysis.auto(S.ds, V(p.outcome), V(p.exposure), Object.assign(opts, { paired: p.paired })); }
-  if (kind === "regression") { if (!V(p.outcome)) throw Object.assign(new Error("Choose an outcome."), { user: true }); return Analysis.regression(S.ds, V(p.outcome), p.preds.map(V).filter(Boolean), Object.assign(opts, { model: p.model })); }
+  if (kind === "regression") {
+    const y = V(p.outcome); if (!y) throw Object.assign(new Error("Choose an outcome."), { user: true });
+    let model = p.model || "auto";
+    if (model === "auto") model = y.type === "ordinal" ? "ordinal" : y.type === "categorical" ? "multinomial" : (p.cluster && ["continuous", "count"].includes(y.type) && y.type === "continuous") ? "mixed" : "auto";
+    if (["ordinal", "multinomial", "mixed"].includes(model)) { const r = Analysis.regressionExt(S.ds, y, p.preds.map(V).filter(Boolean), Object.assign(opts, { model, cluster: p.cluster || null })); if (p.model === "auto") r.decision.unshift({ rule: "Model from outcome type", detail: `"${vlabel(y)}" is ${y.type}${model === "mixed" ? " with a cluster variable" : ""} → ${r.method.toLowerCase()}.` }); return r; }
+    return Analysis.regression(S.ds, y, p.preds.map(V).filter(Boolean), Object.assign(opts, { model }));
+  }
+  if (kind === "survival") {
+    if (!V(p.time) || !V(p.event)) throw Object.assign(new Error("Choose the follow-up time and the event variable."), { user: true });
+    return Analysis.survival(S.ds, V(p.time), V(p.event), p.group ? V(p.group) : null, (p.covs || []).map(V).filter(Boolean), opts);
+  }
 }
 function doRun(kind) {
   const params = JSON.parse(JSON.stringify(S.form[kind]));
@@ -2598,7 +3051,7 @@ function exampleBanner() {
 }
 function pageData() {
   const ds = S.ds;
-  return pageHead("Data analysis · 01", "Data & variables", "Upload a CSV or Excel file with variable names in the first row. Check each variable's type: the type decides which tests are allowed. Your data stay in this browser tab and are never uploaded.") + exampleBanner() + `
+  return pageHead("Data analysis", "Data & variables", "Upload a CSV or Excel file with variable names in the first row. Check each variable's type: the type decides which tests are allowed. Your data stay in this browser tab and are never uploaded.") + exampleBanner() + `
   <div class="grid2">
     <div class="card stack"><label class="drop" id="drop" tabindex="0"><input type="file" id="file" accept=".csv,.txt,.tsv,.xlsx,.xls" hidden><b>Choose a file</b> or drop it here<br><span class="sub">CSV, TSV or Excel (.xlsx) · first row = variable names</span></label>
       ${S.errors.data ? `<div class="notice bad">${esc(S.errors.data)}</div>` : ""}
@@ -2641,7 +3094,7 @@ function summaryOf(v) {
 
 function pageDescribe() {
   const f = S.form.describe, vs = varsUsable();
-  return pageHead("Data analysis · 02", "Describe the sample (Table 1)", "Pick the variables for your descriptive table, and optionally a grouping variable. Each continuous variable is summarised as mean (SD) or median (IQR) depending on its distribution, with the matching test.") + exampleBanner() + `
+  return pageHead("Data analysis", "Describe the sample (Table 1)", "Pick the variables for your descriptive table, and optionally a grouping variable. Each continuous variable is summarised as mean (SD) or median (IQR) depending on its distribution, with the matching test.") + exampleBanner() + `
   <div class="card stack">
     <div><span class="label">Variables to describe</span><div class="chips">${vs.map(v => `<button class="chip" aria-pressed="${f.vars.includes(v.name)}" data-act="desc-var" data-v="${esc(v.name)}">${esc(vlabel(v))}<span class="t">${TYPE_SHORT[v.type]}</span></button>`).join("")}</div>
       <div class="row" style="margin-top:.4rem"><button class="btn quiet sm" data-act="desc-all">Select all</button><button class="btn quiet sm" data-act="desc-none">Clear</button></div></div>
@@ -2666,7 +3119,7 @@ function comparePlan() {
 }
 function pageCompare() {
   const f = S.form.compare;
-  return pageHead("Data analysis · 03", "Compare & relate", "Choose an outcome and an exposure (or a second variable). The app checks the assumptions, picks the correct test, and records every rule it applied.") + exampleBanner() + `
+  return pageHead("Data analysis", "Compare & relate", "Choose an outcome and an exposure (or a second variable). The app checks the assumptions, picks the correct test, and records every rule it applied.") + exampleBanner() + `
   <div class="card stack">
     <div class="row">
       <div class="field"><label class="label" for="c-out">${f.paired ? "First measurement" : "Outcome (dependent variable)"}</label><select id="c-out" data-act="form" data-path="compare.outcome">${varOptions(f.outcome)}</select></div>
@@ -2687,11 +3140,12 @@ function pageCompare() {
 function pageRegression() {
   const f = S.form.regression, vs = varsUsable().filter(v => v.name !== f.outcome);
   const o = V(f.outcome);
-  const models = [["auto", "Automatic (from the outcome type)"], ["linear", "Linear (continuous outcome)"], ["logistic", "Logistic (binary outcome → odds ratios)"], ["modpoisson", "Modified Poisson (binary outcome → prevalence/risk ratios)"], ["poisson", "Poisson (count outcome → rate ratios)"]];
-  return pageHead("Data analysis · 04", "Regression", "Model an outcome with several predictors. You get crude and adjusted estimates side by side, and the model's diagnostics decide whether robust standard errors are needed.") + exampleBanner() + `
+  const models = [["auto", "Automatic (from the outcome type)"], ["linear", "Linear (continuous outcome)"], ["logistic", "Logistic (binary outcome → odds ratios)"], ["modpoisson", "Modified Poisson (binary outcome → prevalence/risk ratios)"], ["poisson", "Poisson (count outcome → rate ratios)"], ["ordinal", "Ordinal logistic (ordered categories)"], ["multinomial", "Multinomial logistic (3+ unordered categories)"], ["mixed", "Linear mixed model (clustered or repeated data)"]];
+  return pageHead("Data analysis", "Regression", "Model an outcome with several predictors. You get crude and adjusted estimates side by side, and the model's diagnostics decide whether robust standard errors are needed.") + exampleBanner() + `
   <div class="card stack">
-    <div class="row"><div class="field"><label class="label" for="r-out">Outcome</label><select id="r-out" data-act="form" data-path="regression.outcome">${varOptions(f.outcome, v => ["continuous", "count", "binary"].includes(v.type))}</select></div>
+    <div class="row"><div class="field"><label class="label" for="r-out">Outcome</label><select id="r-out" data-act="form" data-path="regression.outcome">${varOptions(f.outcome, v => ["continuous", "count", "binary", "ordinal", "categorical"].includes(v.type))}</select></div>
       <div class="field"><label class="label" for="r-model">Model</label><select id="r-model" data-act="form" data-path="regression.model">${models.map(([v, l]) => `<option value="${v}"${v === f.model ? " selected" : ""}>${l}</option>`).join("")}</select></div></div>
+    ${f.model === "mixed" ? `<div class="row"><div class="field" style="max-width:420px"><label class="label" for="r-cluster">Cluster variable (random intercept)</label><select id="r-cluster" data-act="form" data-path="regression.cluster">${varOptions(f.cluster, v => v.name !== f.outcome && !f.preds.includes(v.name), "Choose the cluster (clinic, school, village, person ID)")}</select><small>Observations in the same cluster are allowed to be correlated.</small></div></div>` : ""}
     <div><span class="label">Predictors (exposure first, then confounders)</span><div class="chips">${vs.map(v => `<button class="chip" aria-pressed="${f.preds.includes(v.name)}" data-act="reg-pred" data-v="${esc(v.name)}">${esc(vlabel(v))}<span class="t">${TYPE_SHORT[v.type]}</span></button>`).join("")}</div></div>
     ${o && o.type === "binary" && f.model === "auto" ? (() => { const vals = o.values.filter(x => x !== null), prev = vals.filter(x => x === o.levels[1]).length / vals.length; return prev > .1 ? `<div class="notice warn"><b>Common outcome (${F.f(100 * prev, 1)}%).</b> Odds ratios will overstate prevalence or risk ratios. For cross-sectional or cohort data, choose Modified Poisson.</div>` : ""; })() : ""}
     <div class="row"><button class="btn" data-act="run" data-v="regression">Fit the model</button><span class="sub">${f.preds.length} predictor${f.preds.length === 1 ? "" : "s"} selected</span></div>
@@ -2700,9 +3154,25 @@ function pageRegression() {
   <div style="margin-top:1rem">${S.cur.regression ? resultCard(S.cur.regression) : ""}</div>`;
 }
 
+function pageSurvival() {
+  const f = S.form.survival;
+  return pageHead("Data analysis", "Survival analysis", "Analyse time until an event (death, default from care, recovery, relapse). Kaplan–Meier curves and median survival for each group, the log-rank test, and Cox regression for adjusted hazard ratios.") + exampleBanner() + `
+  <div class="card stack">
+    <div class="row">
+      <div class="field"><label class="label" for="s-time">Follow-up time</label><select id="s-time" data-act="form" data-path="survival.time">${varOptions(f.time, v => ["continuous", "count"].includes(v.type), "Time from start to event or censoring")}</select></div>
+      <div class="field"><label class="label" for="s-event">Event</label><select id="s-event" data-act="form" data-path="survival.event">${varOptions(f.event, v => v.type === "binary", "Binary: event vs censored")}</select><small>${V(f.event) ? `Event = ${esc(V(f.event).levels[1])}; ${esc(V(f.event).levels[0])} = censored. Change the coding in Data & variables.` : "The second category of a binary variable is the event."}</small></div>
+      <div class="field"><label class="label" for="s-group">Compare groups (optional)</label><select id="s-group" data-act="form" data-path="survival.group">${varOptions(f.group, v => v.type === "binary" || v.type === "categorical", "No grouping")}</select></div>
+    </div>
+    <div><span class="label">Adjust for (optional, Cox regression)</span><div class="chips">${varsUsable().filter(v => ![f.time, f.event, f.group].includes(v.name)).map(v => `<button class="chip" aria-pressed="${f.covs.includes(v.name)}" data-act="surv-cov" data-v="${esc(v.name)}">${esc(vlabel(v))}<span class="t">${TYPE_SHORT[v.type]}</span></button>`).join("")}</div></div>
+    <div class="row"><button class="btn" data-act="run" data-v="survival">Run survival analysis</button></div>
+    ${S.errors.survival ? `<div class="notice bad">${esc(S.errors.survival)}</div>` : ""}
+  </div>
+  <div style="margin-top:1rem">${S.cur.survival ? resultCard(S.cur.survival) : ""}</div>`;
+}
+
 function pageExport() {
   const entries = S.log.map(e => ({ spec: e.result.spec, title: e.result.title }));
-  return pageHead("Data analysis · 05", "Analysis log & export", "Every analysis you run is logged here. Export one script per language that reproduces all of them from the cleaned data file, plus a results report.") + `
+  return pageHead("Data analysis", "Analysis log & export", "Every analysis you run is logged here. Export one script per language that reproduces all of them from the cleaned data file, plus a results report.") + `
   <div class="card stack">
     ${S.log.length ? `<div>${S.log.map(e => `<div class="log-item"><span class="k">${String(e.k).padStart(2, "0")}</span><div style="min-width:0"><b>${esc(e.result.title)}</b><div class="sub">${esc(e.result.method)} · n = ${e.result.n}</div></div>
       <div class="row" style="gap:.3rem"><button class="btn quiet sm" data-act="log-view" data-id="${e.id}">View</button><button class="btn quiet sm" data-act="log-remove" data-id="${e.id}" aria-label="Remove analysis ${e.k}">Remove</button></div></div>`).join("")}</div>`
@@ -2731,6 +3201,10 @@ function pageRules() {
     ["Linear regression", R.hetero + " Residual normality (Shapiro–Wilk) and Cook's distance (> 4/n) are reported.", "Koenker (1981); White (1980)"],
     ["Logistic regression", "Wald 95% CIs for odds ratios; Hosmer–Lemeshow with 10 risk groups; ROC AUC; separation is flagged when the model fails to converge or predicts 0/1. " + R.commonOutcome, "Hosmer & Lemeshow (2013)"],
     ["Prevalence ratios", "Modified Poisson: log link with robust (HC0) sandwich standard errors.", "Zou (2004)"],
+    ["Ordinal outcome", "Ordinal logistic regression (proportional odds), cumulative odds ratios with Wald CIs. The proportional-odds assumption is checked in the exported code (Brant test).", "McCullagh (1980)"],
+    ["Nominal outcome (3+ categories)", "Multinomial logistic regression against the first category; relative risk ratios; events per variable checked in the smallest category.", ""],
+    ["Clustered or repeated data", "Linear mixed model with a random intercept (REML); fixed-effect SEs from (X′V⁻¹X)⁻¹ as Stata and R; the ICC shows how much variance lies between clusters.", "Laird & Ware (1982)"],
+    ["Time to event", "Kaplan–Meier with Greenwood SEs and log(−log) CIs; log-rank test for groups; Cox regression with Efron ties. Proportional hazards are checked in the exported code (Schoenfeld residuals).", "Kaplan & Meier (1958); Cox (1972)"],
     ["Count outcomes", R.dispersion + " Excess zeros are flagged.", ""],
     ["Missing data", "Each analysis uses complete cases for the variables involved and reports how many rows were excluded. Crude regression estimates use all rows with that predictor and the outcome.", ""],
     ["Descriptive summaries", "Mean (SD) when normal by the normality rule, otherwise median (IQR, type-7 quantiles as R and Python). Categorical: n (column %).", ""],
@@ -2792,7 +3266,7 @@ function render() {
   const tools = S.section === "method" ? METHOD_TOOLS : DATA_TOOLS, cur = S.tool[S.section];
   $("#qa-rail").innerHTML = `<div class="rail-group"><h4>${S.section === "method" ? "Methodology" : "Data analysis"}</h4><nav aria-label="Tools">${tools.map(t => `<button data-act="tool" data-v="${t.id}" ${t.id === cur ? 'aria-current="page"' : ""}><span class="k">${t.k}</span><span>${esc(t.label)}</span><small>${esc(t.sub)}</small></button>`).join("")}</nav></div>
     <p class="rail-note">${S.section === "method" ? "Rule-based: the same answers always give the same advice." : `${S.log.length} analys${S.log.length === 1 ? "is" : "es"} in the log. Data never leave this tab.`}</p>`;
-  const pages = { question: pageQuestion, design: pageDesign, sample: pageSample, test: pageTest, checklist: pageChecklist, forecast: pageForecast, ask: pageAsk, askm: pageAskMethods, data: pageData, describe: pageDescribe, compare: pageCompare, regression: pageRegression, export: pageExport, rules: pageRules };
+  const pages = { question: pageQuestion, design: pageDesign, sample: pageSample, test: pageTest, checklist: pageChecklist, forecast: pageForecast, data: pageData, describe: pageDescribe, compare: pageCompare, regression: pageRegression, survival: pageSurvival, export: pageExport, rules: pageRules };
   $("#qa-main").innerHTML = (pages[cur] || pages.question)();
   persist();
 }
@@ -2825,8 +3299,9 @@ function onClick(e) {
     case "desc-all": S.form.describe.vars = varsUsable().map(x => x.name).filter(n => n !== S.form.describe.group); render(); break;
     case "desc-none": S.form.describe.vars = []; render(); break;
     case "reg-pred": toggle(S.form.regression.preds, v); render(); break;
+    case "surv-cov": toggle(S.form.survival.covs, v); render(); break;
     case "run": doRun(v); break;
-    case "log-remove": S.log = S.log.filter(x => x.id !== +el.dataset.id); ["describe", "compare", "regression"].forEach(k => { if (S.cur[k] && S.cur[k].id === +el.dataset.id) S.cur[k] = null; }); renumber(); render(); break;
+    case "log-remove": S.log = S.log.filter(x => x.id !== +el.dataset.id); ["describe", "compare", "regression", "survival"].forEach(k => { if (S.cur[k] && S.cur[k].id === +el.dataset.id) S.cur[k] = null; }); renumber(); render(); break;
     case "log-view": { const en = S.log.find(x => x.id === +el.dataset.id); if (en) { S.cur[en.kind] = en; S.form[en.kind] = JSON.parse(JSON.stringify(en.params)); S.tool.data = en.kind; render(); qaTop(); } break; }
     case "dl-zip": downloadZip(); break;
     case "dl-report": saveFile("results_report.html", reportHTML()); break;
@@ -2874,14 +3349,14 @@ function loadExample() { const p = Data.parseDelimited(EXAMPLE_CSV); loadDataset
 function seedExampleForms() {
   S.form.describe = { vars: ["age_years", "sex", "residence", "education_level", "bmi", "systolic_bp"], group: "hypertension" };
   S.form.compare = { outcome: "systolic_bp", exposure: "salt_intake", paired: false, force: "" };
-  S.form.regression = { outcome: "hypertension", preds: ["age_years", "bmi", "residence", "sex"], model: "modpoisson" };
+  S.form.regression = { outcome: "hypertension", preds: ["age_years", "bmi", "residence", "sex"], model: "modpoisson", cluster: "" };
+  S.form.survival = { time: "follow_up_months", event: "lost_to_follow_up", group: "hypertension", covs: ["age_years", "smoker"] };
 }
 
 /* =====================================================================
    Forecast tool (website build): Holt-Winters from quantai-engine.js
    ===================================================================== */
-DATA_TOOLS.splice(4, 0, { id: "forecast", k: "05", label: "Forecast", sub: "Holt-Winters time series" });
-DATA_TOOLS.forEach((t, i) => { if (t.id === "export") t.k = "06"; });
+DATA_TOOLS.splice(DATA_TOOLS.findIndex(t => t.id === "export"), 0, { id: "forecast", k: "06", label: "Forecast", sub: "Holt-Winters time series" });
 S.fc = { date: "", value: "", h: "", res: null, err: null };
 
 function fcDateVars() {
@@ -2995,7 +3470,7 @@ function pageForecast() {
       <section class="stack" style="gap:.5rem"><div class="sect-t" style="margin:0">Code to reproduce it</div>${codeBlock(fcCode(r), { maxh: 300 })}</section>
     </article>`;
   }
-  return pageHead("Data analysis · 05", "Forecast", "Forecast a value over time with Holt-Winters exponential smoothing. QuantAI detects the time step, adds a seasonal pattern when there is enough history, and shows an 80% range.") + exampleBanner() + `
+  return pageHead("Data analysis", "Forecast", "Forecast a value over time with Holt-Winters exponential smoothing. QuantAI detects the time step, adds a seasonal pattern when there is enough history, and shows an 80% range.") + exampleBanner() + `
   <div class="card stack">
     ${!dvs.length ? `<div class="notice info">No date column was found in this data. You can forecast in row order, or <a href="#" data-act="fc-example">load the monthly malaria example</a> (48 months of clinic data).</div>` : ""}
     <div class="row">
@@ -3038,16 +3513,13 @@ loadDataset = function () { S.fc = { date: "", value: "", h: "", res: null, err:
    ===================================================================== */
 const AI_URL = "https://mah-assistant.kamalamadu8.workers.dev";
 const AI_PRIVACY = "Your question and a statistical summary (never your file) are sent to the Model Analysis Hub assistant. Numbers come from QuantAI's own calculations; the assistant only explains them, so check anything important.";
-DATA_TOOLS.splice(DATA_TOOLS.findIndex(t => t.id === "export"), 0, { id: "ask", k: "AI", label: "Ask QuantAI", sub: "Questions about your data" });
-METHOD_TOOLS.push({ id: "askm", k: "AI", label: "Ask about methods", sub: "Design, sample size, tests" });
-S.chat = { data: [], methods: [], busy: {}, err: {} };
 S.explain = {};
 
 const aiErrText = code => ({ rate_limited: "You've asked a lot of questions in a short time. Wait a few minutes and try again.", busy: "The assistant is busy right now. Try again in a minute.", not_configured: "The assistant isn't set up yet.", network: "The assistant couldn't be reached. Check your connection; all other tools still work." })[code] || "The assistant couldn't answer right now. All other tools still work.";
 async function askAI(mode, context, messages) {
   let res;
   try {
-    res = await fetch(AI_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, context: context.slice(0, 7900), messages: messages.slice(-10).map(m => ({ role: m.role, content: m.content.slice(0, 590) })) }) });
+    res = await fetch(AI_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, context: context.slice(0, 11900), messages: messages.slice(-10).map(m => ({ role: m.role, content: m.content.slice(0, 590) })) }) });
   } catch (e) { throw Object.assign(new Error("network"), { code: "network" }); }
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.reply) throw Object.assign(new Error(data.error || "failed"), { code: data.error || "failed" });
@@ -3093,40 +3565,6 @@ function methodsContext() {
   return L.join("\n");
 }
 
-/* ---------- chat pages ---------- */
-const DATA_STARTERS = ["Which results here are statistically significant?", "Which test should I use next for my research question?", "How do I report these results in my thesis?", "Are there data-quality problems I should fix first?"];
-const METHOD_STARTERS = ["Is my design right for my research question?", "How do I justify my sample size?", "What are the main biases in my design and how do I reduce them?", "Which statistical analysis matches my objectives?"];
-function chatPanel(kind, starters, placeholder) {
-  const log = S.chat[kind], busy = S.chat.busy[kind], err = S.chat.err[kind];
-  return `<div class="card stack">
-    <div class="stack" style="gap:.8rem" aria-live="polite">${log.length ? log.map(m => m.role === "user"
-      ? `<div style="align-self:flex-end;max-width:85%;background:var(--accent);color:var(--accent-ink);padding:.55rem .85rem;border-radius:12px 12px 2px 12px">${esc(m.content)}</div>`
-      : `<div style="max-width:92%;background:var(--surface-2);padding:.7rem .9rem;border-radius:12px 12px 12px 2px" class="stack">${aiFormat(m.content)}</div>`).join("")
-      : `<p class="sub">Ask in your own words, or start with one of these:</p>`}
-      ${busy ? `<div class="sub"><span class="spin"></span> Thinking…</div>` : ""}</div>
-    ${!log.length ? `<div class="chips">${starters.map(s => `<button class="chip" data-act="ai-starter" data-kind="${kind}" data-text="${esc(s)}">${esc(s)}</button>`).join("")}</div>` : ""}
-    ${err ? `<div class="notice bad">${esc(err)}</div>` : ""}
-    <form class="row" data-ai-form="${kind}" style="flex-wrap:nowrap"><div class="field" style="flex:1"><label class="label" for="ai-q-${kind}">Your question</label><input type="text" id="ai-q-${kind}" maxlength="580" placeholder="${esc(placeholder)}" autocomplete="off"></div><button class="btn" type="submit" ${busy ? "disabled" : ""}>Ask</button></form>
-    <div class="row" style="justify-content:space-between;align-items:center"><p class="sub muted" style="font-size:.76rem;max-width:70ch">${esc(kind === "data" ? AI_PRIVACY : "Your question and what you entered in the methodology tools are sent to the Model Analysis Hub assistant. Treat its answers as advice to check, not a final decision.")}</p>${log.length ? `<button class="btn quiet sm" data-act="ai-clear" data-kind="${kind}">Clear chat</button>` : ""}</div>
-  </div>`;
-}
-function pageAsk() {
-  return pageHead("Data analysis · AI", "Ask QuantAI", "Ask questions about your data and the analyses you've run. The assistant sees variable summaries and your results, not the file, and answers in plain language.") + exampleBanner() + chatPanel("data", DATA_STARTERS, "e.g. What does the regression tell me about BMI?");
-}
-function pageAskMethods() {
-  return pageHead("Methodology · AI", "Ask about methods", "Ask about study design, sampling, sample size, bias or analysis plans. The assistant sees what you've entered in the other methodology tools, so it can answer for your study.") + chatPanel("methods", METHOD_STARTERS, "e.g. Should I use a cohort or a cross-sectional design?");
-}
-async function sendChat(kind, text) {
-  text = (text || "").trim(); if (!text || S.chat.busy[kind]) return;
-  S.chat[kind].push({ role: "user", content: text }); S.chat.busy[kind] = true; S.chat.err[kind] = null; render();
-  try {
-    const reply = await askAI(kind === "data" ? "data" : "methods", kind === "data" ? dataContext() : methodsContext(), S.chat[kind]);
-    S.chat[kind].push({ role: "assistant", content: reply });
-  } catch (e) { S.chat[kind].pop(); S.chat.err[kind] = aiErrText(e.code); }
-  S.chat.busy[kind] = false; render();
-  const inp = document.getElementById("ai-q-" + kind); if (inp && !S.chat.err[kind]) inp.focus();
-}
-
 /* ---------- explain button on result cards ---------- */
 function aiExplainHTML(entry) {
   const st = S.explain[entry.id] || {};
@@ -3148,17 +3586,191 @@ async function explainResult(id) {
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]"); if (!el) return;
   const act = el.dataset.act;
-  if (act === "ai-starter") { e.preventDefault(); sendChat(el.dataset.kind, el.dataset.text); }
-  if (act === "ai-clear") { e.preventDefault(); S.chat[el.dataset.kind] = []; S.chat.err[el.dataset.kind] = null; render(); }
   if (act === "ai-explain") { e.preventDefault(); explainResult(+el.dataset.id); }
 });
+
+/* =====================================================================
+   QuantAI Chat (website build): a conversation interface. The assistant
+   (Groq via the Model Analysis Hub worker) reads a summary of the data,
+   the analyses run and the methodology inputs, and can ask QuantAI to
+   run an analysis. QuantAI's engine computes every result shown.
+   ===================================================================== */
+const CHAT_KEY = "chats";
+S.chats = (() => { const c = store.get(CHAT_KEY, []); return Array.isArray(c) ? c.slice(0, 30) : []; })();
+S.chatId = S.chats.length ? S.chats[0].id : null;
+S.chatBusy = false;
+const saveChats = () => store.set(CHAT_KEY, S.chats.slice(0, 30).map(c => ({ ...c, messages: c.messages.slice(-60).map(m => ({ role: m.role, content: m.content, action: m.action || null, note: m.note || null })) })));
+const curChat = () => S.chats.find(c => c.id === S.chatId) || null;
+function newChat() { const c = { id: "c" + Date.now().toString(36), title: "New chat", created: Date.now(), messages: [] }; S.chats.unshift(c); S.chatId = c.id; saveChats(); return c; }
+
+/* ---------- resolving variable names the assistant (or user) gives ---------- */
+function resolveVar(name, types) {
+  if (!name || !S.ds) return null;
+  const n = String(name).trim().toLowerCase(), vs = varsUsable();
+  const hit = vs.find(v => v.name === n) || vs.find(v => v.label.toLowerCase() === n) || vs.find(v => v.name.replace(/_/g, " ") === n.replace(/_/g, " ")) ||
+    vs.find(v => v.label.toLowerCase().includes(n) || n.includes(v.label.toLowerCase()));
+  if (hit && types && !types.includes(hit.type)) return null;
+  return hit || null;
+}
+const ACTION_LABEL = { describe: "Describe", compare: "Compare & relate", regression: "Regression", survival: "Survival analysis", forecast: "Forecast", open: "Open tool" };
+function addEntry(kind, params, result) {
+  const entry = { id: ++S.logSeq, k: S.log.length + 1, kind, params, result };
+  S.log.push(entry); S.cur[kind] = entry; S.form[kind] = JSON.parse(JSON.stringify(params)); renumber();
+  return entry;
+}
+/** Run an action through the deterministic engine. Returns {entry} | {forecast:true} | {nav} ; throws user errors. */
+function runAction(a) {
+  const need = (nm, label, types) => { const v = resolveVar(nm, types); if (!v) throw Object.assign(new Error(`I couldn't find a suitable variable for ${label} ("${nm || "none given"}"). Variables: ${varsUsable().map(x => x.name).join(", ")}.`), { user: true }); return v.name; };
+  const many = (arr, label) => (Array.isArray(arr) ? arr : []).map(x => need(x, label));
+  if (a.type === "describe") { const vars = many(a.vars && a.vars.length ? a.vars : varsUsable().map(v => v.name).slice(0, 8), "the table"); const group = a.group ? need(a.group, "the grouping variable", ["binary", "categorical"]) : ""; return { entry: addEntry("describe", { vars: vars.filter(v => v !== group), group }, runAnalysis("describe", { vars: vars.filter(v => v !== group), group })) }; }
+  if (a.type === "compare") { const p = { outcome: need(a.outcome, "the outcome"), exposure: need(a.exposure, "the exposure"), paired: !!a.paired, force: "" }; return { entry: addEntry("compare", p, runAnalysis("compare", p)) }; }
+  if (a.type === "regression") { const p = { outcome: need(a.outcome, "the outcome"), preds: many(a.predictors, "the predictors"), model: ["auto", "linear", "logistic", "modpoisson", "poisson", "ordinal", "multinomial", "mixed"].includes(a.model) ? a.model : "auto", cluster: a.cluster ? need(a.cluster, "the cluster variable") : "" }; return { entry: addEntry("regression", p, runAnalysis("regression", p)) }; }
+  if (a.type === "survival") { const p = { time: need(a.time, "follow-up time", ["continuous", "count"]), event: need(a.event, "the event", ["binary"]), group: a.group ? need(a.group, "the group", ["binary", "categorical"]) : "", covs: many(a.covariates, "the covariates") }; return { entry: addEntry("survival", p, runAnalysis("survival", p)) }; }
+  if (a.type === "forecast") {
+    const value = need(a.value, "the value to forecast", ["continuous", "count"]), dv = a.date ? resolveVar(a.date) : null;
+    S.fc = { date: dv ? dv.name : (fcDateVars()[0] ? fcDateVars()[0].name : "__row"), value, h: String(Math.max(1, Math.min(60, parseInt(a.horizon, 10) || 12))), res: null, err: null };
+    runForecast(); if (S.fc.err) throw Object.assign(new Error(S.fc.err), { user: true }); return { forecast: true };
+  }
+  if (a.type === "open") { const t = a.tool; if (METHOD_TOOLS.some(x => x.id === t)) return { nav: ["method", t] }; if (DATA_TOOLS.some(x => x.id === t)) return { nav: ["data", t] }; throw Object.assign(new Error(`There is no "${t}" tool.`), { user: true }); }
+  throw Object.assign(new Error("I don't know how to run that yet."), { user: true });
+}
+/** Offline fallback for the most common request when the assistant can't be reached. */
+function localIntent(text) {
+  const m = text.match(/(?:compare|difference in|differ(?:ence)?s? in)\s+(.+?)\s+(?:by|between|across|among)\s+(.+?)[?.!]*$/i);
+  if (m) { const o = resolveVar(m[1]), e = resolveVar(m[2].replace(/^(the )?(groups? of |categories of )/i, "").replace(/\b(men and women|males? and females?)\b/i, "sex")); if (o && e) return { type: "compare", outcome: o.name, exposure: e.name, paired: false }; }
+  return null;
+}
+function parseAgent(reply) {
+  const t = String(reply || "").trim();
+  const tryJ = s => { try { return JSON.parse(s); } catch (e) { return null; } };
+  let j = tryJ(t); if (!j) { const i = t.indexOf("{"), k = t.lastIndexOf("}"); if (i >= 0 && k > i) j = tryJ(t.slice(i, k + 1)); }
+  if (j && typeof j.reply === "string") return { reply: j.reply, action: j.action && typeof j.action === "object" ? j.action : null };
+  return { reply: t, action: null };
+}
+function agentContext() {
+  const parts = [dataContext(), "", "METHODOLOGY INPUTS:", methodsContext()];
+  return parts.join("\n").slice(0, 11900);
+}
+async function sendChatMessage(text) {
+  text = (text || "").trim(); if (!text || S.chatBusy) return;
+  const c = curChat() || newChat();
+  c.messages.push({ role: "user", content: text });
+  if (c.title === "New chat") c.title = text.slice(0, 60);
+  S.chatBusy = true; saveChats(); render();
+  let reply, action, note = null;
+  try {
+    const hist = c.messages.filter(m => m.role === "user" || m.role === "assistant").slice(-10).map(m => ({ role: m.role, content: m.role === "assistant" && m.action ? `${m.content}\n[QuantAI ran: ${JSON.stringify(m.action)}]` : m.content }));
+    ({ reply, action } = parseAgent(await askAI("agent", agentContext(), hist)));
+  } catch (e) {
+    const local = localIntent(text);
+    if (local) { reply = "The assistant can't be reached right now, so I ran this directly with QuantAI's rules."; action = local; }
+    else { reply = aiErrText(e.code) + " You can still run any analysis from the Data analysis tools, or try a request like \"compare systolic_bp by sex\"."; action = null; note = "error"; }
+  }
+  const msg = { role: "assistant", content: reply, action: action || null, note };
+  if (action) {
+    try { const r = runAction(action); msg.ref = r.entry ? r.entry.id : null; msg.forecast = !!r.forecast; if (r.nav) { msg.nav = r.nav; } }
+    catch (err) { msg.content = (reply ? reply + "\n\n" : "") + (err.user ? err.message : "The analysis failed: " + err.message); msg.note = "error"; msg.failed = true; }
+  }
+  c.messages.push(msg); S.chatBusy = false; saveChats();
+  if (msg.nav) { S.section = msg.nav[0]; S.tool[msg.nav[0]] = msg.nav[1]; }
+  render();
+}
+
+/* ---------- rendering ---------- */
+function chatResultCard(m) {
+  if (m.forecast && S.fc.res) {
+    const r = S.fc.res, hw = r.hw, Q = window.QuantAI;
+    return `<div class="card stack" style="padding:1rem"><div class="res-head"><h3>Forecast of ${esc(vlabel(V(r.yv)))}</h3><span class="pill acc">${hw.seasonal ? "Holt-Winters (seasonal)" : "Holt's linear trend"}</span></div>
+      ${tableHTML({ title: "Next periods", columns: ["Period", "Forecast", "80% range"], rows: hw.forecast.slice(0, 6).map((v, i) => [r.fx[i], Q.fmt(v), `${Q.fmt(hw.lower[i])} to ${Q.fmt(hw.upper[i])}`]) })}
+      <div class="row"><button class="btn quiet sm" data-act="chat-open" data-sec="data" data-tool="forecast">Open the full forecast</button></div></div>`;
+  }
+  const en = m.ref && S.log.find(x => x.id === m.ref);
+  if (!en) return m.action && !m.failed && m.action.type !== "open" ? `<div class="notice info" style="font-size:.84rem">${esc(ACTION_LABEL[m.action.type] || "Analysis")} from an earlier visit. Results aren't stored, so the data must be loaded again. <button class="btn quiet sm" data-act="chat-rerun" data-i="${esc(JSON.stringify(m.action))}">Run it again</button></div>` : "";
+  const r = en.result, main = r.tables.find(t => /coefficient|ratio|Fixed|Hazard|t-test|ANOVA|Kruskal|Mann|chi|Fisher|correlation|McNemar|Wilcoxon|Table 1/i.test(t.title)) || r.tables[0];
+  const ex = S.explain[en.id] || {};
+  return `<div class="card stack" style="padding:1rem">
+    <div class="res-head"><div class="stack" style="gap:.15rem"><span class="sect-t">Analysis ${en.k}</span><h3>${esc(r.title)}</h3></div><div class="meta"><span class="pill acc">${esc(r.method)}</span>${r.n ? `<span class="pill num">n = ${r.n}</span>` : ""}</div></div>
+    <details class="fold"><summary>Rules applied (${r.decision.length})</summary>${auditHTML(r.decision)}</details>
+    ${tableHTML(Object.assign({}, main, { rows: main.rows.slice(0, 12) }))}
+    ${r.writeup ? `<p class="apa">${esc(r.writeup)}</p>` : ""}
+    ${ex.text ? `<div class="stack" style="background:var(--surface-2);padding:.7rem .9rem;border-radius:10px">${aiFormat(ex.text)}</div>` : ""}${ex.err ? `<div class="notice bad">${esc(ex.err)}</div>` : ""}
+    <div class="row"><button class="btn quiet sm" data-act="chat-open" data-sec="data" data-tool="${en.kind}" data-id="${en.id}">Open full result and code</button>${r.writeup ? `<button class="btn quiet sm" data-act="copy-apa" data-id="${en.id}">Copy write-up</button>` : ""}<button class="btn ghost sm" data-act="ai-explain" data-id="${en.id}" ${ex.busy ? "disabled" : ""}>${ex.busy ? '<span class="spin"></span> Explaining…' : "Explain in plain language"}</button></div>
+  </div>`;
+}
+const CHAT_STARTERS = () => S.isExample && /hypertension/i.test(S.dsSource) ? [
+  "Compare systolic BP between men and women",
+  "Which factors are associated with hypertension? Use prevalence ratios.",
+  "Is loss to follow-up higher among people with hypertension?",
+  "Describe the sample by district",
+  "What study design fits a study of salt intake and hypertension?",
+  "How big a sample do I need to estimate hypertension prevalence?",
+] : ["Describe my data", "Which variables are related to my main outcome?", "Which test should I use for my research question?", "How should I report these results?"];
+function renderChat() {
+  codeRegistry.clear();
+  document.querySelectorAll(".qa-sections button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === "chat")));
+  const c = curChat();
+  $("#qa-rail").innerHTML = `<div class="rail-group"><h4>Conversations</h4>
+    <div style="padding:0 .6rem .5rem"><button class="btn sm" data-act="chat-new" style="width:100%;justify-content:center">New chat</button></div>
+    <nav aria-label="Conversations">${S.chats.length ? S.chats.map(x => `<button data-act="chat-pick" data-id="${x.id}" ${x.id === S.chatId ? 'aria-current="page"' : ""} style="grid-template-columns:1fr auto"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.title)}</span><span class="k" data-act="chat-del" data-id="${x.id}" role="button" aria-label="Delete conversation" title="Delete">×</span></button>`).join("") : `<p class="rail-note">No conversations yet.</p>`}</nav></div>
+    <p class="rail-note">Saved in this browser only. ${esc(S.ds ? `Data: ${S.dsSource} (${S.ds.nRows} rows).` : "")}</p>`;
+  const msgs = c ? c.messages : [];
+  $("#qa-main").innerHTML = `<header class="ph"><span class="eyebrow">QuantAI Chat</span><h2 class="ph-t">Ask, analyse, explain</h2>
+      <p>Ask about your study or your data in plain English. When you ask for an analysis, QuantAI runs it with its checked statistics and shows the result here, with the rules it applied.</p></header>
+    ${exampleBanner()}
+    <div class="card stack" style="gap:1rem">
+      <div id="qa-thread" class="stack" style="gap:1rem;max-height:62vh;overflow-y:auto;padding-right:.25rem" aria-live="polite">
+        ${msgs.length ? msgs.map(m => m.role === "user"
+          ? `<div style="align-self:flex-end;max-width:85%;background:var(--accent);color:var(--accent-ink);padding:.6rem .9rem;border-radius:14px 14px 3px 14px;white-space:pre-wrap">${esc(m.content)}</div>`
+          : `<div class="stack" style="gap:.6rem;max-width:100%"><div style="max-width:92%;background:${m.note === "error" ? "var(--warn-soft)" : "var(--surface-2)"};padding:.7rem .95rem;border-radius:14px 14px 14px 3px" class="stack">${aiFormat(m.content)}</div>${chatResultCard(m)}</div>`).join("")
+          : `<div class="stack" style="gap:.6rem"><p class="sub">Try one of these, or type your own question:</p><div class="chips">${CHAT_STARTERS().map(s => `<button class="chip" data-act="chat-starter" data-text="${esc(s)}">${esc(s)}</button>`).join("")}</div></div>`}
+        ${S.chatBusy ? `<div class="sub"><span class="spin"></span> Thinking…</div>` : ""}
+      </div>
+      <form id="qa-chat-form" class="stack" style="gap:.5rem">
+        <label class="label" for="qa-chat-input">Message</label>
+        <textarea id="qa-chat-input" rows="2" maxlength="580" placeholder="e.g. Is BMI associated with hypertension after adjusting for age and sex?" style="min-height:3.2rem"></textarea>
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <div class="row" style="gap:.4rem"><label class="btn quiet sm" style="cursor:pointer"><input type="file" id="qa-chat-file" accept=".csv,.txt,.tsv,.xlsx,.xls" hidden>Upload data</label>${msgs.length ? `<button class="btn quiet sm" type="button" data-act="chat-clear">Clear this chat</button>` : ""}</div>
+          <button class="btn" type="submit" ${S.chatBusy ? "disabled" : ""}>Send</button>
+        </div>
+      </form>
+      <p class="sub muted" style="font-size:.76rem">Your messages, variable names and summary statistics (never your file) go to the Model Analysis Hub assistant. QuantAI's own engine computes every result; the assistant chooses what to run and explains it, so check anything important.</p>
+    </div>`;
+  const th = $("#qa-thread"); if (th) th.scrollTop = th.scrollHeight;
+  persist();
+}
+const _baseRender = render;
+render = function () { if (S.section === "chat") return renderChat(); return _baseRender(); };
+
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]"); if (!el) return;
+  const act = el.dataset.act;
+  if (act === "chat-del") { e.preventDefault(); e.stopPropagation(); S.chats = S.chats.filter(x => x.id !== el.dataset.id); if (S.chatId === el.dataset.id) S.chatId = S.chats.length ? S.chats[0].id : null; saveChats(); render(); return; }
+  if (act === "chat-new") { e.preventDefault(); newChat(); render(); const i = $("#qa-chat-input"); if (i) i.focus(); }
+  if (act === "chat-pick") { e.preventDefault(); S.chatId = el.dataset.id; render(); }
+  if (act === "chat-starter") { e.preventDefault(); sendChatMessage(el.dataset.text); }
+  if (act === "chat-clear") { e.preventDefault(); const c = curChat(); if (c) { c.messages = []; c.title = "New chat"; saveChats(); render(); } }
+  if (act === "chat-open") { e.preventDefault(); const id = +el.dataset.id; const en = S.log.find(x => x.id === id); if (en) S.cur[en.kind] = en; S.section = el.dataset.sec; S.tool[el.dataset.sec] = el.dataset.tool; render(); qaTop(); }
+  if (act === "chat-rerun") { e.preventDefault(); const a = JSON.parse(el.dataset.i), c = curChat(); try { const r = runAction(a); c.messages.push({ role: "assistant", content: `Ran ${ACTION_LABEL[a.type] || "the analysis"} again with the current data.`, action: a, ref: r.entry ? r.entry.id : null, forecast: !!r.forecast }); } catch (err) { c.messages.push({ role: "assistant", content: err.message, note: "error" }); } saveChats(); render(); }
+});
 document.addEventListener("submit", e => {
-  const f = e.target.closest("[data-ai-form]"); if (!f) return;
-  e.preventDefault(); const kind = f.dataset.aiForm, inp = f.querySelector("input"); sendChat(kind, inp.value);
+  if (e.target.id !== "qa-chat-form") return;
+  e.preventDefault(); const i = $("#qa-chat-input"); const t = i.value; i.value = ""; sendChatMessage(t);
+});
+document.addEventListener("keydown", e => {
+  if (e.target.id === "qa-chat-input" && e.key === "Enter" && !e.shiftKey) { e.preventDefault(); const t = e.target.value; e.target.value = ""; sendChatMessage(t); }
+});
+document.addEventListener("change", async e => {
+  if (e.target.id !== "qa-chat-file" || !e.target.files[0]) return;
+  const f = e.target.files[0]; e.target.value = "";
+  await readFile(f);
+  const c = curChat() || newChat();
+  c.messages.push(S.errors.data ? { role: "assistant", content: S.errors.data, note: "error" } : { role: "assistant", content: `Loaded **${f.name}**: ${S.ds.nRows} rows and ${S.ds.vars.length} variables. Check the variable types in Data & variables if anything looks wrong, then ask me what you'd like to analyse.` });
+  saveChats(); render();
 });
 
 /* ---------- start-up ---------- */
 function start() {
+  DATA_TOOLS.filter(t => /^\d+$/.test(t.k)).forEach((t, i) => t.k = String(i + 1).padStart(2, "0"));
   document.addEventListener("click", onClick);
   document.addEventListener("change", onChange);
   document.addEventListener("input", onInput);
@@ -3169,8 +3781,8 @@ function start() {
   document.addEventListener("keydown", e => { if (e.target.id === "drop" && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); $("#file").click(); } });
   loadExample();
   // a worked example in the results so every page opens in a real working state
-  ["compare", "regression", "describe"].forEach(k => { try { const params = JSON.parse(JSON.stringify(S.form[k])); const result = runAnalysis(k, params); const en = { id: ++S.logSeq, k: 0, kind: k, params, result }; S.log.push(en); S.cur[k] = en; } catch (e) { console.error(e); } });
-  S.log.sort((a, b) => ["describe", "compare", "regression"].indexOf(a.kind) - ["describe", "compare", "regression"].indexOf(b.kind)); renumber();
+  ["compare", "regression", "describe", "survival"].forEach(k => { try { const params = JSON.parse(JSON.stringify(S.form[k])); const result = runAnalysis(k, params); const en = { id: ++S.logSeq, k: 0, kind: k, params, result }; S.log.push(en); S.cur[k] = en; } catch (e) { console.error(e); } });
+  S.log.sort((a, b) => ["describe", "compare", "regression", "survival"].indexOf(a.kind) - ["describe", "compare", "regression", "survival"].indexOf(b.kind)); renumber();
   render();
 }
 start();
