@@ -16,7 +16,7 @@ Amadu Kamal built his skills through mentors and real projects. He combines the 
 - [Home](https://modelanalysishub.com/): Who Amadu Kamal is, what he does, selected work and contact details.
 - [About Amadu Kamal](https://modelanalysishub.com/founder.html): Full biography, toolkit and milestones.
 - [Projects](https://modelanalysishub.com/projects.html): Case studies of his models, dashboards and web platforms, including Soma, his food delivery platform for the Volta Region.
-- [QuantAI](https://modelanalysishub.com/ai.html): Free data analysis tool. Upload a spreadsheet, ask questions about it, and get statistics, correlations, regression and forecasts in plain language.
+- [QuantAI](https://modelanalysishub.com/ai.html): Free research methods and statistics tool. Plan a study, upload a spreadsheet, and get assumption-checked tests, regression, forecasts and matching Stata, Python, R and SPSS code.
 
 ## Expertise
 
@@ -38,4 +38,4 @@ Amadu Kamal built his skills through mentors and real projects. He combines the 
 
 ## QuantAI
 
-- [QuantAI](https://modelanalysishub.com/ai.html): Live and free to use. The statistics run in the browser, so the file itself is never uploaded; users can also type questions about their data and get answers in plain language. Reads CSV, TSV and Excel files; profiles every column; finds correlations with p-values; fits ordinary least squares regression; and forecasts time series with Holt-Winters exponential smoothing. Results are explained in plain language.
+- [QuantAI](https://modelanalysishub.com/ai.html): Live and free to use. Everything runs in the browser, so the file is never uploaded and no AI service is involved. Methodology tools: research question builder (PICO/PECO/SPIDER/PCC), rule-based study design advisor, sample size calculator, statistical test selector and reporting checklists (STROBE, CONSORT, STARD, COREQ, PRISMA). Data analysis: reads CSV, TSV and Excel files; Table 1; t-tests, Welch, Mann-Whitney, ANOVA, Kruskal-Wallis, correlation, chi-square, Fisher's exact and McNemar, each chosen by assumption checks (Shapiro-Wilk, Brown-Forsythe, expected counts); linear, logistic, Poisson and modified Poisson regression with diagnostics; Holt-Winters forecasting; APA-style write-ups; and export of every analysis as Stata, Python, R and SPSS code. Results are checked against SciPy and statsmodels.

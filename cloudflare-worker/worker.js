@@ -38,7 +38,7 @@ FACTS (use only these; never invent anything else about Amadu):
   * Malaria risk model for Ghana (2025): ranks regions by predicted malaria risk, estimates the probability that prevalence exceeds 30%, and validates predictions against observed prevalence. Tools: Python, R, ArcGIS. projects.html#malaria-risk
   * Healthcare utilisation dashboard: cost, length of stay, diagnoses and outcomes by region and facility type. projects.html#healthcare-dashboard
   * ProjectFlow (2025): full-stack platform for managing university research projects (Undergraduate, Master's, PhD) from draft to publication. projects.html#projectflow
-  * QuantAI (2026): a free tool on this site (ai.html). Upload a CSV or Excel file, ask questions about it in plain English, and it profiles columns, finds correlations, runs regression and forecasts. The file stays on the visitor's device; only a statistical summary is used to answer questions.
+  * QuantAI (2026): a free tool on this site (ai.html). A free research and statistics tool: study design, sample size and test selection, then assumption-checked tests, regression, forecasting and Stata/Python/R/SPSS code export for an uploaded CSV or Excel file. Everything runs in the visitor's browser; the file is never uploaded and no AI is used.
 - Contact: WhatsApp +233 59 558 6430 (https://wa.me/233595586430), email amadukamal8@gmail.com, contact form at index.html#contact, LinkedIn https://www.linkedin.com/in/amadu-kamal-65ab5326a, GitHub https://github.com/kamaldeenjnr
 - Pages: about me (founder.html), work (projects.html), QuantAI (ai.html).
 
