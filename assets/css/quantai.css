@@ -477,3 +477,10 @@ body.qa-page { background: #fff; }
   .chat-dock { padding: .75rem .75rem calc(env(safe-area-inset-bottom, 0px) + .5rem); }
   .side-chat .icon-btn { opacity: 1; }
 }
+
+/* data check list */
+.qa .dq { list-style: none; margin: .2rem 0; padding: 0; display: grid; gap: .45rem; }
+.qa .dq li { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: .6rem; align-items: start; font-size: .9rem; line-height: 1.5; color: var(--ink); }
+.qa .dq .dq-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: .45rem; background: #9AA6B6; }
+.qa .dq .dq-warn .dq-dot { background: #C9741A; }
+.qa .dq li .btn { margin-left: .35rem; vertical-align: baseline; }

@@ -860,10 +860,12 @@ const Data = (function () {
 
   /** RFC-4180 CSV parser with quoted fields, embedded newlines, and delimiter detection. */
   function parseDelimited(text) {
-    text = text.replace(/^﻿/, "");
-    const firstLine = text.split(/\r?\n/, 1)[0] || "";
+    text = text.replace(/^\uFEFF/, "");
+    // choose the delimiter that gives the most consistent, widest rows over the first lines (title lines may sit above the table)
+    const lines = text.split(/\r?\n/).filter(l => l.trim()).slice(0, 30);
     const cands = [",", ";", "\t", "|"];
-    const delim = cands.map(d => [d, firstLine.split(d).length]).sort((a, b) => b[1] - a[1])[0][0];
+    const score = d => { const w = lines.map(l => l.split(d).length); const mode = modeOf(w); return mode > 1 ? mode * w.filter(x => x === mode).length : 0; };
+    const delim = cands.map(d => [d, score(d)]).sort((a, b) => b[1] - a[1])[0][0];
     const rows = []; let row = [], cur = "", inQ = false;
     for (let i = 0; i < text.length; i++) {
       const c = text[i];
@@ -880,8 +882,40 @@ const Data = (function () {
       } else cur += c;
     }
     if (cur !== "" || row.length) { row.push(cur); if (row.length > 1 || row[0] !== "") rows.push(row); }
-    const headers = (rows.shift() || []).map(h => h.trim());
-    return { headers, rows, delimiter: delim };
+    const t = tidyTable(rows);
+    return { headers: t.headers, rows: t.rows, delimiter: delim, notes: t.notes };
+  }
+  function modeOf(arr) { const c = new Map(); let best = arr[0] || 0, bc = 0; arr.forEach(x => { const k = (c.get(x) || 0) + 1; c.set(x, k); if (k > bc || (k === bc && x > best)) { bc = k; best = x; } }); return best; }
+
+  /** Find the real header row in a raw grid (rows of strings): skips title/notes lines above the table,
+      drops empty columns, and removes blank and "Total" rows below it. Returns { headers, rows, notes }. */
+  function tidyTable(grid) {
+    const notes = [];
+    grid = grid.map(r => r.map(c => (c == null ? "" : String(c))));
+    const filled = r => r.filter(c => c.trim() !== "").length;
+    const widths = grid.slice(0, 200).map(filled).filter(w => w > 0);
+    const W = widths.length ? modeOf(widths) : 0;
+    let h = 0;
+    const looksHeader = r => { const f = r.filter(c => c.trim() !== ""); return f.length >= Math.max(2, Math.ceil(0.6 * W)) && f.filter(c => !isNum(c.trim())).length >= 0.6 * f.length; };
+    for (let i = 0; i < Math.min(25, grid.length - 1); i++) { if (looksHeader(grid[i]) && filled(grid[i + 1]) >= Math.max(2, Math.ceil(0.5 * W))) { h = i; break; } }
+    if (h > 0) notes.push({ kind: "header", msg: `Skipped ${h} line${h > 1 ? "s" : ""} above the table (titles or notes); variable names were found on line ${h + 1}.` });
+    let headers = grid[h] || [], rows = grid.slice(h + 1);
+    // drop columns that are empty in the header and every row
+    const ncol = Math.max(headers.length, ...rows.slice(0, 500).map(r => r.length));
+    const keep = [];
+    for (let j = 0; j < ncol; j++) if ((headers[j] || "").trim() !== "" || rows.some(r => (r[j] || "").trim() !== "")) keep.push(j);
+    if (keep.length < ncol && ncol - keep.length > 0 && keep.length) { const nd = ncol - keep.length; if (nd > 0 && keep.length < ncol) notes.push({ kind: "cols", msg: `Removed ${nd} empty column${nd > 1 ? "s" : ""}.` }); }
+    headers = keep.map(j => (headers[j] || "").trim());
+    rows = rows.map(r => keep.map(j => r[j] == null ? "" : r[j]));
+    const before = rows.length;
+    rows = rows.filter(r => r.some(c => c.trim() !== ""));
+    // a summary row at the bottom ("Total", "Mean") is not an observation
+    const tot = /^(total|totals|grand total|sum|mean|average|overall)$/i;
+    let dropped = 0;
+    while (rows.length > 1 && rows[rows.length - 1].some(c => tot.test(c.trim()))) { rows.pop(); dropped++; }
+    if (dropped) notes.push({ kind: "total", msg: `Removed ${dropped} summary row${dropped > 1 ? "s" : ""} ("Total"/"Mean") at the bottom of the table.` });
+    if (before - rows.length - dropped > 0) notes.push({ kind: "blank", msg: `Removed ${before - rows.length - dropped} blank row${before - rows.length - dropped > 1 ? "s" : ""}.` });
+    return { headers, rows, notes };
   }
 
   /** Make names valid and identical in Stata, R, Python and SPSS: lowercase, a–z0–9_, ≤ 30 chars, unique. */
@@ -913,36 +947,162 @@ const Data = (function () {
     const missSet = new Set([...DEFAULT_MISSING, ...extraMissing]);
     const names = cleanNames(headers);
     const nRows = rows.length;
+    const varMiss = opts.varMissing || {};
     const vars = headers.map((h, j) => {
       const raw = rows.map(r => (r[j] == null ? "" : String(r[j])).trim());
-      const vals = raw.map(v => missSet.has(v.toLowerCase()) ? null : v);
-      return makeVar(names[j], h, vals);
+      const own = new Set((varMiss[names[j]] || []).map(x => String(x).trim().toLowerCase()));
+      let vals = raw.map(v => missSet.has(v.toLowerCase()) || own.has(v.toLowerCase()) ? null : v);
+      const fixes = [];
+      const cn = cleanNumbers(vals); if (cn) { vals = cn.vals; fixes.push(cn.note); }
+      const pres = vals.filter(v => v !== null), nonNum = pres.filter(x => !isNum(x)), nonNumU = [...new Set(nonNum)];
+      if (pres.length - nonNum.length >= 10 && nonNum.length && nonNum.length <= 0.1 * pres.length && nonNumU.length <= 5) {
+        vals = vals.map(v => v !== null && !isNum(v) ? null : v);
+        fixes.push(`Set ${nonNum.length} text entr${nonNum.length > 1 ? "ies" : "y"} in a numeric column to missing: ${nonNumU.map(x => `"${x}"`).join(", ")}.`);
+      }
+      const cm = mergeCase(vals); if (cm) { vals = cm.vals; fixes.push(cm.note); }
+      const v = makeVar(names[j], h, vals, opts);
+      v.fixes = fixes;
+      return v;
     });
+    likertBatch(vars);
     return { vars, nRows, names, labels: headers };
+  }
+
+  /** "1,250", "GH₵ 40", "45%", "12 kg" → plain numbers, when every value in the column has the same form. */
+  function cleanNumbers(vals) {
+    const present = vals.filter(v => v !== null);
+    if (!present.length || present.every(isNum)) return null;
+    const re = /^(gh₵|ghs|gh¢|ghc|us\$|usd|\$|€|eur|£|gbp|¥|₦|ngn|ksh|kes|rs|inr|cfa|xof|₵|¢|)\s*([-+]?(?:\d{1,3}(?:,\d{3})+|\d+)?(?:\.\d+)?)\s*(%|kg|g|mg|mcg|lb|lbs|cm|mm|m|km|ml|l|yrs?|years?|months?|mos?|wks?|weeks?|days?|hrs?|hours?|mins?|minutes?|secs?|mmhg|bpm|ha|acres?|°c|c)?\.?$/i;
+    const pre = new Set(), suf = new Set(), shown = []; let ok = 0, changed = 0;
+    const out = vals.map(v => {
+      if (v === null) return null;
+      const m = v.match(re); if (!m || !m[2] || !/\d/.test(m[2])) return v;
+      if (!pre.has(m[1].toLowerCase()) && m[1]) shown.push(m[1]); if (!suf.has((m[3] || "").toLowerCase()) && m[3]) shown.push(m[3]); pre.add(m[1].toLowerCase()); suf.add((m[3] || "").toLowerCase()); ok++;
+      const x = String(Number(m[2].replace(/,/g, ""))); if (x !== v) changed++;
+      return x;
+    });
+    // all values (or all but a few words such as "refused", handled next) must share one number format
+    if (!changed || ok < 0.9 * present.length || ok < present.length - 5 || pre.size > 2 || suf.size > 2) return null;
+    const unit = shown.join(" ");
+    return { vals: out, note: `Read as numbers${unit ? ` after removing "${unit}"` : ""} and thousands separators.` };
+  }
+  /** "Yes", "yes", "YES " → one spelling (the most common). */
+  function mergeCase(vals) {
+    const present = vals.filter(v => v !== null);
+    if (!present.length || present.every(isNum)) return null;
+    const groups = new Map();
+    present.forEach(v => { const k = v.toLowerCase().replace(/\s+/g, " ").trim(); if (!groups.has(k)) groups.set(k, new Map()); const g = groups.get(k); g.set(v, (g.get(v) || 0) + 1); });
+    if (groups.size === new Set(present).size) return null;
+    if (groups.size > 50) return null;
+    const canon = new Map(); groups.forEach((g, k) => canon.set(k, [...g.entries()].sort((a, b) => b[1] - a[1] || (/^[A-Z]/.test(b[0]) - /^[A-Z]/.test(a[0])))[0][0]));
+    const merged = [...groups.values()].filter(g => g.size > 1).map(g => [...g.keys()].map(x => `"${x}"`).join(" = "));
+    return { vals: vals.map(v => v === null ? null : canon.get(v.toLowerCase().replace(/\s+/g, " ").trim())), note: `Merged spellings that differ only in capitals or spaces: ${merged.slice(0, 3).join("; ")}${merged.length > 3 ? " …" : ""}.` };
+  }
+  /** Three or more columns sharing the same small 1..k (or 0..k) integer scale are questionnaire items: treat as ordinal. */
+  function likertBatch(vars) {
+    const key = v => v.numeric && v.type === "categorical" && !v.hint ? v.allLevels.join(",") : null;
+    const groups = new Map();
+    vars.forEach(v => { const k = key(v); if (k && /^(0,)?1,2,3(,4(,5(,6(,7)?)?)?)?$/.test(k)) { if (!groups.has(k)) groups.set(k, []); groups.get(k).push(v); } });
+    groups.forEach(g => { if (g.length >= 3) g.forEach(v => { v.type = v.inferredType = "ordinal"; v.why = `one of ${g.length} items on the same ${v.allLevels[0]}–${v.allLevels[v.allLevels.length - 1]} scale (questionnaire items)`; setLevels(v); }); });
   }
   function makeVar(name, label, vals) {
     const present = vals.filter(v => v !== null);
     const numeric = present.length > 0 && present.every(isNum);
     const uniq = [...new Set(present)];
-    const levels = sortLevels(uniq, numeric);
+    let levels = sortLevels(uniq, numeric);
     const v = { name, label, values: vals, numeric, nMissing: vals.length - present.length, nUnique: uniq.length, allLevels: levels };
     v.type = inferType(v, present);
     v.inferredType = v.type;
     setLevels(v);
+    if (v.type === "ordinal" && v.scaleOrder) v.levels = v.scaleOrder;
     return v;
   }
+
+  /* ---- what a variable's name says about it ---- */
+  const toks = name => name.toLowerCase().split(/[_\s]+|(?<=[a-z])(?=\d)/).filter(Boolean);
+  const HINT = {
+    id: /^(id|uid|code|serial|sn|no|num|number|record|respondent|participant|subject|patient|case|caseid|pid|hhid|key|index)$/,
+    group: /^(group|grp|cat|category|band|class|bracket|range|level)$/,
+    cat: /^(sex|gender|region|district|state|province|county|community|village|town|city|zone|area|site|clinic|facility|hospital|school|marital|religion|ethnicity|ethnic|tribe|occupation|employment|employed|job|profession|residence|location|urban|rural|status|type|arm|treatment|intervention|race|nationality|language|brand|method|mode|source|department|ward|team|country|colour|color|blood|species|variety|breed|crop|product|channel|sector|industry)$/,
+    ord: /^(education|educ|edu|grade|stage|severity|satisfaction|satisfied|agree|agreement|likert|rating|rank|frequency|often|quintile|quartile|tertile|decile|wealth|ses|class|scale|level|importance|priority|stars|pain)$/,
+    cont: /^(age|weight|wt|height|ht|bmi|bp|sbp|dbp|pressure|systolic|diastolic|glucose|sugar|cholesterol|hb|hgb|haemoglobin|hemoglobin|income|salary|wage|price|cost|amount|expenditure|spend|revenue|sales|profit|time|duration|days|months|years|weeks|hours|minutes|seconds|distance|temperature|temp|score|marks|mark|percent|percentage|pct|rate|ratio|length|width|size|volume|dose|yield|area_ha|kg|cm|mm|count|visits|children|births|members|household_size|hhsize|number_of|steps|calories|gpa|cgpa|iq|bmi_z|waist|hip|muac|viral|cd4|creatinine|potassium|sodium|pulse|heart_rate|rr|spo2|tenure|experience|quantity|qty|units|population|density|rainfall|humidity)$/,
+  };
+  function nameHint(name) {
+    const t = toks(name), has = re => t.some(x => re.test(x));
+    if (has(HINT.group) && (has(HINT.cont) || t.includes("age"))) return "ord";
+    if (/^(no|num|number|n)_of/.test(name)) return "cont";
+    // the last meaningful word decides ("clinic_visits" is a count, "visit_clinic" a category)
+    for (let i = t.length - 1; i >= 0; i--) {
+      const x = t[i];
+      if (HINT.id.test(x)) { if (!has(HINT.cont) && !has(HINT.cat)) return "id"; continue; }
+      if (HINT.ord.test(x)) return "ord";
+      if (HINT.cat.test(x) || HINT.group.test(x)) return "cat";
+      if (HINT.cont.test(x)) return "cont";
+    }
+    if (/^q\d+[a-z]?$|^item\d+$|^[a-z]{1,4}\d{1,2}$/.test(name.toLowerCase())) return "item";
+    return null;
+  }
+  /* ---- ordered answer scales recognised from their words ---- */
+  const SCALES = [
+    ["strongly disagree", "disagree", "somewhat disagree", "neither agree nor disagree", "neutral", "undecided", "not sure", "somewhat agree", "agree", "strongly agree"],
+    ["very dissatisfied", "dissatisfied", "somewhat dissatisfied", "neutral", "neither", "somewhat satisfied", "satisfied", "very satisfied"],
+    ["never", "rarely", "seldom", "occasionally", "sometimes", "often", "frequently", "usually", "very often", "always"],
+    ["very poor", "poor", "fair", "average", "good", "very good", "excellent"],
+    ["very bad", "bad", "average", "good", "very good"],
+    ["none", "no education", "no formal education", "no schooling", "nursery", "kindergarten", "primary", "basic", "middle", "jhs", "junior high", "junior high school", "junior secondary", "secondary", "shs", "senior high", "senior high school", "senior secondary", "high school", "o level", "a level", "vocational", "technical", "vocational/technical", "diploma", "certificate", "hnd", "tertiary", "college", "university", "bachelor", "bachelors", "degree", "first degree", "undergraduate", "graduate", "masters", "master", "postgraduate", "phd", "doctorate"],
+    ["very low", "low", "lower", "below average", "medium", "moderate", "average", "middle", "above average", "high", "higher", "very high"],
+    ["mild", "moderate", "severe", "very severe"],
+    ["none", "minimal", "mild", "moderate", "moderately severe", "severe"],
+    ["very small", "small", "medium", "large", "very large"],
+    ["poorest", "poorer", "poor", "middle", "richer", "rich", "richest"],
+    ["lowest", "second", "middle", "fourth", "highest"],
+    ["not at all", "a little", "slightly", "somewhat", "moderately", "quite a bit", "very", "very much", "extremely"],
+    ["very unlikely", "unlikely", "neutral", "likely", "very likely"],
+    ["not important", "slightly important", "moderately important", "important", "very important"],
+    ["stage i", "stage ii", "stage iii", "stage iv"],
+    ["first", "second", "third", "fourth", "fifth"],
+  ];
+  function scaleOrder(levels) {
+    if (levels.length < 3) return null;
+    const norm = levels.map(l => l.toLowerCase().replace(/^\s*\d+\s*[.)=:-]\s*/, "").replace(/\s+/g, " ").trim());
+    for (const sc of SCALES) { const idx = norm.map(l => sc.indexOf(l)); if (idx.every(i => i >= 0)) return levels.map((l, i) => [l, idx[i]]).sort((a, b) => a[1] - b[1]).map(x => x[0]); }
+    // "1 = Poor", "2 = Fair" ... : ordered by their leading number
+    if (levels.every(l => /^\s*\d+\s*[.)=:-]/.test(l))) return [...levels].sort((a, b) => parseInt(a) - parseInt(b));
+    // ranges such as "18-24", "25-34", "<18", "65+"
+    if (levels.every(l => /^\s*(<|>|≤|≥|under|over|below|above)?\s*\d+(\.\d+)?\s*(-|–|to|\+|and above|and over|or more|plus)?\s*(\d+(\.\d+)?)?\s*[a-z]*\s*$/i.test(l))) {
+      const key = l => { const m = l.match(/\d+(\.\d+)?/); const x = m ? +m[0] : 0; return /^\s*(<|≤|under|below)/i.test(l) ? x - 0.5 : x; };
+      return [...levels].sort((a, b) => key(a) - key(b));
+    }
+    return null;
+  }
   function inferType(v, present) {
-    if (!present.length) return "id";
+    if (!present.length) { v.why = "no values"; return "id"; }
+    const hint = nameHint(v.name); v.hint = hint;
     if (v.numeric) {
       const nums = present.map(Number), allInt = nums.every(Number.isInteger);
-      if (v.nUnique <= 2) return "binary";
-      if (allInt && v.nUnique <= 7) return "categorical";
+      const mn = Math.min(...nums), mx = Math.max(...nums);
+      const consecutive = allInt && v.nUnique === mx - mn + 1;
+      if (v.nUnique <= 2) { v.why = "two values"; return "binary"; }
+      // a running number, one per row: an identifier, not a measurement
+      if (allInt && v.nUnique === present.length && present.length >= 20 && (hint === "id" || (consecutive && hint !== "cont"))) { v.why = "a different whole number on every row (an identifier)"; return "id"; }
+      if (hint === "id" && v.nUnique >= 0.9 * present.length) { v.why = "named like an identifier"; return "id"; }
+      if (allInt && hint === "cat" && v.nUnique <= 40) { v.why = "whole-number codes in a variable named like a category"; return "categorical"; }
+      if (allInt && hint === "ord" && v.nUnique <= 12) { v.why = "whole-number codes in a variable named like an ordered scale"; return "ordinal"; }
+      if (allInt && hint === "item" && consecutive && v.nUnique <= 11 && mn >= 0 && mn <= 1) { v.why = "a questionnaire item on a " + mn + "–" + mx + " scale"; return "ordinal"; }
+      if (hint === "cont") {
+        if (allInt && mn >= 0 && mn <= 1 && mx <= 1000 && !/(^|_)(age|bp|sbp|dbp|systolic|diastolic|weight|height|income|salary|price|cost|score|marks?)($|_)/i.test(v.name)) { v.why = "whole numbers from " + mn + " in a variable named like a count"; return "count"; }
+        v.why = "numbers in a variable named like a measurement"; return "continuous";
+      }
+      if (allInt && v.nUnique <= 7) { v.why = `${v.nUnique} whole-number codes`; return "categorical"; }
       // counts start at 0 or 1 (visits, children, episodes); whole-number measurements (age, blood pressure) do not
-      if (allInt && Math.min(...nums) >= 0 && Math.min(...nums) <= 1) return "count";
-      return "continuous";
+      if (allInt && mn >= 0 && mn <= 1) { v.why = "whole numbers starting at " + mn; return "count"; }
+      v.why = "numbers with many values"; return "continuous";
     }
-    if (v.nUnique <= 2) return "binary";
-    if (v.nUnique <= Math.max(15, 0.05 * present.length)) return "categorical";
+    if (v.nUnique <= 2) { v.why = "two categories"; return "binary"; }
+    const ord = scaleOrder(v.allLevels);
+    if (ord && v.nUnique <= 15) { v.scaleOrder = ord; v.why = "categories that form an ordered scale"; return "ordinal"; }
+    if (v.nUnique <= Math.max(15, 0.05 * present.length) || (hint === "cat" && v.nUnique <= 60 && v.nUnique < 0.5 * present.length)) { v.why = `${v.nUnique} categories`; return "categorical"; }
+    v.why = v.nUnique === present.length ? "different text on every row (names or IDs)" : "free text with many different values";
     return "id";
   }
   /** Levels in analysis order: reference/unexposed first. For binary, levels[1] is the event. */
@@ -981,6 +1141,68 @@ const Data = (function () {
     return out;
   }
 
+
+  /* ---------- data check: problems a careful analyst looks for before any test ---------- */
+  const MISS_CODES = [9, 99, 999, 9999, 99999, -9, -99, -999, -1, 88, 888, 98, 998, 97, 997, 77, 777, 66, 666];
+  const LIMITS = [
+    [/(^|_)age($|_|_years|_yrs)/, 0, 120, "an age"], [/(^|_)(bmi)($|_)/, 10, 80, "a BMI"], [/(^|_)(sbp|systolic)/, 50, 300, "a systolic blood pressure"],
+    [/(^|_)(dbp|diastolic)/, 20, 200, "a diastolic blood pressure"], [/(^|_)(percent|percentage|pct)($|_)/, 0, 100, "a percentage"],
+    [/(^|_)(height|ht)(_cm)?($|_)/, 0, 260, "a height"], [/(^|_)(weight|wt)(_kg)?($|_)/, 0, 400, "a weight"],
+    [/(^|_)(temp|temperature)($|_)/, 25, 45, "a body temperature (°C)"], [/(^|_)(hb|hgb|haemoglobin|hemoglobin)($|_)/, 2, 25, "a haemoglobin (g/dL)"],
+    [/(^|_)(gpa|cgpa)($|_)/, 0, 5, "a grade point average"],
+  ];
+  const NONNEG = /(^|_)(income|salary|wage|price|cost|amount|expenditure|spend|revenue|sales|count|visits|children|births|members|size|duration|days|months|years|weeks|hours|minutes|distance|weight|height|age|dose|quantity|qty|units|time|length|volume|yield|population)($|_)/;
+  function quantile(sorted, q) { const pos = (sorted.length - 1) * q, lo = Math.floor(pos); return sorted[lo] + (sorted[Math.min(lo + 1, sorted.length - 1)] - sorted[lo]) * (pos - lo); }
+  function quality(ds, opts) {
+    opts = opts || {};
+    const out = [], n = ds.nRows, add = (sev, msg, extra) => out.push(Object.assign({ sev, msg }, extra || {}));
+    (opts.notes || []).forEach(x => add("info", x.msg));
+    ds.vars.forEach(v => (v.fixes || []).forEach(f => add("info", `${v.label}: ${f}`, { var: v.name })));
+    if (n < 30) add("warn", `Only ${n} rows. Tests have little power and normality checks are unreliable with so few observations; report results with caution.`);
+    // duplicate rows
+    const seen = new Map(); let dup = 0;
+    for (let i = 0; i < n; i++) { const k = ds.vars.map(v => v.values[i]).join("\u0001"); if (seen.has(k)) dup++; else seen.set(k, i); }
+    if (dup) add("warn", `${dup} row${dup > 1 ? "s are exact duplicates" : " is an exact duplicate"} of an earlier row. Check whether the same person was entered twice.`, { fix: { kind: "dedupe" }, fixLabel: "Remove duplicate rows" });
+    ds.vars.forEach(v => {
+      const pres = v.values.filter(x => x !== null);
+      if (v.type === "id" && v.hint === "id" && pres.length) { const u = new Set(pres).size; if (u < pres.length) add("warn", `${v.label} looks like an ID but ${pres.length - u} value${pres.length - u > 1 ? "s are" : " is"} repeated. If each row should be a different person, some were entered twice; if people were measured more than once, the data are in long format (use a mixed model with this as the cluster).`, { var: v.name }); }
+      if (!pres.length) { add("warn", `${v.label} is empty in every row.`, { var: v.name }); return; }
+      if (v.nUnique === 1) add("info", `${v.label} has the same value ("${pres[0]}") in every row, so it can't explain any differences.`, { var: v.name });
+      const pm = v.nMissing / n;
+      if (pm >= 0.2 && v.type !== "id") add(pm >= 0.5 ? "warn" : "info", `${v.label} is missing for ${(100 * pm).toFixed(0)}% of rows. Analyses with it use only complete cases, which can bias results if the missingness isn't random.`, { var: v.name });
+      if (v.numeric && v.type !== "id") {
+        const nums = pres.map(Number), srt = [...nums].sort((a, b) => a - b), q1 = quantile(srt, 0.25), q3 = quantile(srt, 0.75), iqr = q3 - q1;
+        // missing-value codes such as 99 or 999 hiding as real numbers
+        const cnt = new Map(); nums.forEach(x => cnt.set(x, (cnt.get(x) || 0) + 1));
+        const codes = MISS_CODES.filter(c => cnt.has(c) && (v.type === "continuous" || v.type === "count" ? (iqr > 0 ? (c > q3 + 3 * iqr || c < q1 - 3 * iqr) : c !== srt[Math.floor(srt.length / 2)]) : (v.levels && Math.abs(c) >= 9 && (() => { const others = srt.filter(x => !MISS_CODES.includes(x)); return others.length && (c > Math.max(...others) + 1 || c < Math.min(...others) - 1); })())));
+        if (codes.length) add("warn", `${v.label} contains ${codes.map(c => `${c} (${cnt.get(c)}×)`).join(", ")}, far outside its other values. This is usually a code for "missing" or "don't know"; left as a number it distorts means and tests.`, { var: v.name, fix: { kind: "missing", var: v.name, codes: codes.map(String) }, fixLabel: `Treat ${codes.join(", ")} as missing` });
+        const real = nums.filter(x => !codes.includes(x)); let impossible = new Set();
+        // impossible values for well-known measurements
+        const lim = LIMITS.find(([re]) => re.test(v.name));
+        if (lim && v.type !== "categorical" && v.type !== "binary") { const bad = real.filter(x => x < lim[1] || x > lim[2]); if (bad.length) { impossible = new Set(bad); add("warn", `${v.label} has ${bad.length} value${bad.length > 1 ? "s" : ""} that can't be ${lim[3]} (${[...impossible].slice(0, 5).join(", ")}). Check them against the source records, or set them to missing.`, { var: v.name, fix: { kind: "missing", var: v.name, codes: [...impossible].map(String) }, fixLabel: "Set to missing" }); } }
+        else if (NONNEG.test(v.name) && v.type !== "categorical") { const neg = real.filter(x => x < 0); if (neg.length) { impossible = new Set(neg); add("warn", `${v.label} has ${neg.length} negative value${neg.length > 1 ? "s" : ""}, which isn't possible for this kind of variable.`, { var: v.name, fix: { kind: "missing", var: v.name, codes: [...impossible].map(String) }, fixLabel: "Set to missing" }); } }
+        // extreme values
+        if (v.type === "continuous" && iqr > 0 && real.length >= 20) {
+          const lo = q1 - 3 * iqr, hi = q3 + 3 * iqr, ext = real.filter(x => (x < lo || x > hi) && !impossible.has(x));
+          if (ext.length) add("info", `${v.label} has ${ext.length} extreme value${ext.length > 1 ? "s" : ""} (beyond 3 IQR from the quartiles: ${[...new Set(ext)].sort((a, b) => a - b).slice(0, 5).join(", ")}). Confirm they are real; QuantAI's assumption checks will then pick rank-based tests if they distort the distribution.`, { var: v.name });
+        }
+      }
+      if (v.levels && v.type !== "binary") { const small = v.levels.filter(l => pres.filter(x => x === l).length < 5); if (small.length && small.length <= 6) add("info", `${v.label}: ${small.length === 1 ? "category" : "categories"} ${small.map(x => `"${x}"`).join(", ")} ${small.length === 1 ? "has" : "have"} fewer than 5 observations. Consider merging small categories before modelling.`, { var: v.name }); }
+    });
+    // wide layout: the same measurement repeated across columns (bp1, bp2, bp3 / score_t0, score_t1)
+    const stems = new Map();
+    ds.vars.forEach(v => { const m = v.name.match(/^(.*?)(_?(t|v|visit|wave|time|round|month|m|week|w|day|d|y|year)?_?)(\d{1,2})$/); if (m && m[1].length >= 2 && v.numeric) { const k = m[1].replace(/_$/, ""); if (!stems.has(k)) stems.set(k, []); stems.get(k).push(v.name); } });
+    ds.vars.forEach(v => { const m = v.name.match(/^(.+?)_(baseline|\d+_?(months?|weeks?|days?|years?|m|w|d|y))$/); if (m && v.numeric) { if (!stems.has(m[1])) stems.set(m[1], []); if (!stems.get(m[1]).includes(v.name)) stems.get(m[1]).push(v.name); } });
+    stems.forEach((cols, k) => {
+      const base = ds.vars.find(v => v.name === k); if (base && base.numeric && !cols.includes(k)) cols.unshift(k);
+      if (cols.length >= 3 && !cols.every(c => /^q\d|^item\d/.test(c))) add("info", `${cols.slice(0, 4).join(", ")}${cols.length > 4 ? " …" : ""} look like the same measurement taken ${cols.length} times (wide format). Compare two time points with a paired test; for all of them, reshape to one row per person per visit and use a mixed model.`);
+    });
+    const complete = completeRows(ds, ds.vars.filter(v => v.type !== "id")).length;
+    if (complete < 0.7 * n && ds.vars.length > 2) add("info", `Only ${complete} of ${n} rows (${(100 * complete / n).toFixed(0)}%) are complete for every variable. Each analysis uses the rows complete for its own variables, so sample sizes will differ between tables.`);
+    const order = { warn: 0, info: 1 };
+    return out.sort((a, b) => order[a.sev] - order[b.sev]);
+  }
+
   /** CSV text of the cleaned dataset (clean names, missing as empty) — the file every exported script reads. */
   function toCSV(ds) {
     const q = s => /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
@@ -990,7 +1212,7 @@ const Data = (function () {
     return lines.join("\n") + "\n";
   }
 
-  return { parseDelimited, cleanNames, build, makeVar, setType, setReference, setLevels, num, completeRows, toCSV, isNum, sortLevels, DEFAULT_MISSING };
+  return { parseDelimited, tidyTable, scaleOrder, nameHint, quality, cleanNames, build, makeVar, setType, setReference, setLevels, num, completeRows, toCSV, isNum, sortLevels, DEFAULT_MISSING };
 })();
 if (false) module.exports = Data;
 
@@ -2964,8 +3186,8 @@ const DATA_TOOLS = [
 ];
 
 /* ---------- dataset loading ---------- */
-function loadDataset(headers, rows, source, isExample) {
-  S.raw = { headers, rows }; S.dsSource = source; S.isExample = !!isExample; S.overrides = isExample ? exampleOverrides() : {};
+function loadDataset(headers, rows, source, isExample, notes) {
+  S.raw = { headers, rows }; S.readNotes = notes || []; S.dsSource = source; S.isExample = !!isExample; S.overrides = isExample ? exampleOverrides() : {};
   S.log = []; S.logSeq = 0; S.cur = { describe: null, compare: null, regression: null, survival: null }; S.errors = {};
   S.form = { describe: { vars: [], group: "" }, compare: { outcome: "", exposure: "", paired: false, force: "" }, regression: { outcome: "", preds: [], model: "auto", cluster: "" }, survival: { time: "", event: "", group: "", covs: [] } };
   rebuild();
@@ -2973,8 +3195,25 @@ function loadDataset(headers, rows, source, isExample) {
 function exampleOverrides() { return { education_level: { type: "ordinal", order: ["None", "Primary", "Secondary", "Tertiary"] }, salt_intake: { type: "ordinal", order: ["Low", "Moderate", "High"] }, self_rated_health: { type: "ordinal", order: ["Poor", "Fair", "Good", "Very good"] }, usual_source_of_care: { ref: "Hospital" } }; }
 function rebuild() {
   const codes = S.missingCodes.split(",").map(s => s.trim()).filter(Boolean);
-  S.ds = Data.build(S.raw.headers, S.raw.rows, { missingCodes: codes });
+  const varMissing = {}; Object.entries(S.overrides || {}).forEach(([k, o]) => { if (o.missing && o.missing.length) varMissing[k] = o.missing; });
+  S.ds = Data.build(S.raw.headers, S.raw.rows, { missingCodes: codes, varMissing });
   S.ds.vars.forEach(applyOverride);
+  S.quality = Data.quality(S.ds, { notes: S.readNotes || [] });
+}
+/** Apply one fix offered by the data check. */
+function applyQualityFix(fix) {
+  if (!fix) return "";
+  if (fix.kind === "missing") { const o = S.overrides[fix.var] = S.overrides[fix.var] || {}; o.missing = [...new Set([...(o.missing || []), ...fix.codes])]; delete o.order; rebuild(); rerunLog(); return `${fix.codes.join(", ")} now count${fix.codes.length > 1 ? "" : "s"} as missing in ${fix.var}.`; }
+  if (fix.kind === "dedupe") { const seen = new Set(), before = S.raw.rows.length; S.raw.rows = S.raw.rows.filter(r => { const k = r.join("\u0001"); if (seen.has(k)) return false; seen.add(k); return true; }); rebuild(); rerunLog(); return `Removed ${before - S.raw.rows.length} duplicate row${before - S.raw.rows.length > 1 ? "s" : ""}.`; }
+  return "";
+}
+function applyAllFixes() { const done = []; let guard = 0; while (guard++ < 30) { const q = (S.quality || []).find(x => x.fix); if (!q) break; done.push(applyQualityFix(q.fix)); } return done; }
+function qualityHTML(compact) {
+  const q = S.quality || [], warn = q.filter(x => x.sev === "warn"), info = q.filter(x => x.sev !== "warn");
+  if (!q.length) return `<div class="notice ok">No problems found: no duplicates, missing-value codes, impossible values or layout issues.</div>`;
+  const item = (x, i) => `<li class="dq-${x.sev}"><span class="dq-dot" aria-hidden="true"></span><span>${esc(x.msg)}${x.fix ? ` <button class="btn quiet sm" data-act="dq-fix" data-i="${i}">${esc(x.fixLabel || "Fix")}</button>` : ""}</span></li>`;
+  const list = arr => arr.map(x => item(x, q.indexOf(x))).join("");
+  return `<ul class="dq">${list(warn)}${compact && info.length > 4 ? list(info.slice(0, 4)) + `<li class="dq-info"><span class="dq-dot"></span><span>${info.length - 4} more note${info.length - 4 > 1 ? "s" : ""} in Data & variables.</span></li>` : list(info)}</ul>${q.filter(x => x.fix).length > 1 ? `<div class="row"><button class="btn sm" data-act="dq-fix-all">Apply all ${q.filter(x => x.fix).length} fixes</button></div>` : ""}`;
 }
 function applyOverride(v) {
   const o = S.overrides[v.name]; if (!o) return;
@@ -2995,14 +3234,19 @@ async function readFile(file) {
     if (["xlsx", "xls", "xlsm"].includes(ext)) {
       const XLSX = await loadSheetJs();
       const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: "", blankrows: false });
-      if (!aoa.length) throw new Error("The first sheet is empty.");
-      loadDataset(aoa[0].map(String), aoa.slice(1).map(r => r.map(c => String(c))), name + (wb.SheetNames.length > 1 ? ` (sheet "${wb.SheetNames[0]}")` : ""), false);
+      // use the sheet holding the most data (the first sheet is often a cover page or notes)
+      const grids = wb.SheetNames.map(sn => ({ sn, aoa: XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: false, defval: "", blankrows: false }) }));
+      grids.forEach(g => { g.cells = g.aoa.reduce((a, r) => a + r.filter(c => String(c).trim() !== "").length, 0); });
+      const best = grids.sort((a, b) => b.cells - a.cells)[0];
+      if (!best || !best.cells) throw new Error("The workbook is empty.");
+      const t = Data.tidyTable(best.aoa);
+      if (!t.headers.length || !t.rows.length) throw new Error("No table found in the workbook.");
+      if (wb.SheetNames.length > 1) t.notes.unshift({ kind: "sheet", msg: `Used sheet "${best.sn}", the one with the most data (the workbook has ${wb.SheetNames.length} sheets).` });
+      loadDataset(t.headers, t.rows, name + (wb.SheetNames.length > 1 ? ` (sheet "${best.sn}")` : ""), false, t.notes);
     } else {
       const p = Data.parseDelimited(await file.text());
       if (!p.headers.length || !p.rows.length) throw new Error("No rows found. The first row must hold variable names.");
-      loadDataset(p.headers, p.rows, name, false);
+      loadDataset(p.headers, p.rows, name, false, p.notes);
     }
     S.errors.data = null; toast(`Loaded ${S.ds.nRows.toLocaleString()} rows × ${S.ds.vars.length} variables`);
   } catch (e) { S.errors.data = `Couldn't read "${name}": ${e.message || e}. Use a .csv or .xlsx file with variable names in the first row.`; }
@@ -3051,19 +3295,20 @@ function exampleBanner() {
 }
 function pageData() {
   const ds = S.ds;
-  return pageHead("Data analysis", "Data & variables", "Upload a CSV or Excel file with variable names in the first row. Check each variable's type: the type decides which tests are allowed. Your data stay in this browser tab and are never uploaded.") + exampleBanner() + `
+  return pageHead("Data analysis", "Data & variables", "Upload a CSV or Excel file with one row per person or observation and variable names at the top. QuantAI detects each variable's type, skips title lines, and checks the file for common problems. Confirm the types below: the type decides which tests are allowed. Your data stay in this browser tab and are never uploaded.") + exampleBanner() + `
   <div class="grid2">
-    <div class="card stack"><label class="drop" id="drop" tabindex="0"><input type="file" id="file" accept=".csv,.txt,.tsv,.xlsx,.xls" hidden><b>Choose a file</b> or drop it here<br><span class="sub">CSV, TSV or Excel (.xlsx) · first row = variable names</span></label>
+    <div class="card stack"><label class="drop" id="drop" tabindex="0"><input type="file" id="file" accept=".csv,.txt,.tsv,.xlsx,.xls" hidden><b>Choose a file</b> or drop it here<br><span class="sub">CSV, TSV or Excel (.xlsx) · one row per observation</span></label>
       ${S.errors.data ? `<div class="notice bad">${esc(S.errors.data)}</div>` : ""}
       <div class="row"><button class="btn quiet sm" data-act="load-example">Load the example data</button></div></div>
     <div class="card stack"><dl class="kv num"><dt>Dataset</dt><dd>${esc(S.dsSource)}</dd><dt>Rows</dt><dd>${ds.nRows.toLocaleString()}</dd><dt>Variables</dt><dd>${ds.vars.length} (${ds.vars.filter(v => v.type === "id").length} ignored)</dd><dt>Complete rows</dt><dd>${Data.completeRows(ds, ds.vars.filter(v => v.type !== "id")).length.toLocaleString()}</dd></dl>
       <div class="row"><div class="field"><label class="label" for="miss">Extra missing-value codes</label><input type="text" id="miss" placeholder="e.g. 99, -9, 999" value="${esc(S.missingCodes)}" data-act="missing"><small>Empty cells, NA, N/A, NaN, null and "." are always missing.</small></div>
         <div class="field" style="flex:0 1 150px"><label class="label" for="alpha">Significance level α</label><select id="alpha" data-act="alpha">${[0.05, 0.01, 0.1].map(a => `<option value="${a}"${a === S.alpha ? " selected" : ""}>${a}</option>`).join("")}</select></div></div></div>
   </div>
+  <div class="card stack" style="margin-top:1rem"><div class="row" style="justify-content:space-between;align-items:center"><h2>Data check</h2><span class="sub">${(S.quality || []).filter(x => x.sev === "warn").length} to review · ${(S.quality || []).filter(x => x.sev !== "warn").length} notes</span></div>${qualityHTML(false)}</div>
   <div class="card stack" style="margin-top:1rem"><div class="row" style="justify-content:space-between;align-items:center"><h2>Variables</h2><span class="sub">Name in code = the name every exported script uses.</span></div>
     <div class="tw"><table class="t vt"><thead><tr><th class="l">Variable</th><th class="l">Name in code</th><th class="l">Type</th><th class="l">Coding (first = reference / 0)</th><th>Missing</th><th class="l">Summary</th></tr></thead><tbody>
     ${ds.vars.map(v => `<tr><td class="l"><b>${esc(v.label)}</b></td><td class="l"><code>${esc(v.name)}</code></td>
-      <td class="l"><select aria-label="Type of ${esc(v.label)}" data-act="vtype" data-var="${esc(v.name)}">${Object.entries(TYPE_LABEL).filter(([t]) => typeAllowed(v, t)).map(([t, l]) => `<option value="${t}"${t === v.type ? " selected" : ""}>${l}</option>`).join("")}</select>${v.type !== v.inferredType ? ` <span class="pill warn" title="Detected as ${v.inferredType}">changed</span>` : ""}</td>
+      <td class="l"><select aria-label="Type of ${esc(v.label)}" data-act="vtype" data-var="${esc(v.name)}">${Object.entries(TYPE_LABEL).filter(([t]) => typeAllowed(v, t)).map(([t, l]) => `<option value="${t}"${t === v.type ? " selected" : ""}>${l}</option>`).join("")}</select>${v.type !== v.inferredType ? ` <span class="pill warn" title="Detected as ${v.inferredType}">changed</span>` : ""}${v.why && v.type === v.inferredType ? `<br><small class="sub">${esc(v.why)}</small>` : ""}</td>
       <td class="l">${codingCell(v)}</td>
       <td class="num">${v.nMissing ? `<span title="${(100 * v.nMissing / ds.nRows).toFixed(1)}%">${v.nMissing}</span>` : '<span class="muted">0</span>'}</td>
       <td class="l sub">${esc(summaryOf(v))}</td></tr>`).join("")}</tbody></table></div>
@@ -3295,6 +3540,8 @@ function onClick(e) {
     case "copy": copyText(el.dataset.text); break;
     case "copy-apa": { const en = S.log.find(x => x.id === +el.dataset.id); if (en) copyText(en.result.writeup); break; }
     case "load-example": loadExample(); render(); toast("Example data loaded"); break;
+    case "dq-fix": { const q = (S.quality || [])[+el.dataset.i]; if (q && q.fix) { const m = applyQualityFix(q.fix); render(); toast(m); } break; }
+    case "dq-fix-all": { const d = applyAllFixes(); render(); toast(d.length + " fix" + (d.length === 1 ? "" : "es") + " applied"); break; }
     case "desc-var": toggle(S.form.describe.vars, v); render(); break;
     case "desc-all": S.form.describe.vars = varsUsable().map(x => x.name).filter(n => n !== S.form.describe.group); render(); break;
     case "desc-none": S.form.describe.vars = []; render(); break;
@@ -3540,13 +3787,15 @@ function dataContext(extra) {
   L.push(`DATASET: ${S.dsSource}; ${ds.nRows} rows; significance level ${S.alpha}.`);
   L.push("VARIABLES (name in code | original name | type | missing | summary):");
   ds.vars.filter(v => v.type !== "id").forEach(v => L.push(`- ${v.name} | ${v.label} | ${v.type} | ${v.nMissing} missing | ${summaryOf(v)}`));
+  const q = S.quality || [];
+  if (q.length) { L.push("", "DATA CHECK (QuantAI's automatic checks of this file; mention problems that affect the requested analysis):"); q.slice(0, 14).forEach(x => L.push(`- [${x.sev === "warn" ? "REVIEW" : "note"}] ${x.msg}`)); }
   const log = S.log.slice(-6);
   if (log.length) {
     L.push("", "ANALYSES ALREADY RUN IN QUANTAI (results are exact):");
     log.forEach(e => { const r = e.result; L.push(`${e.k}. ${r.title} — ${r.method}; n = ${r.n}. ${r.writeup || ""}`); r.decision.filter(d => d.ok === false).forEach(d => L.push(`   warning: ${d.rule}: ${d.detail}`)); });
   }
   if (S.fc && S.fc.res) { const r = S.fc.res, hw = r.hw; L.push("", `FORECAST: ${r.yv}, ${r.ts.y.length} points, ${hw.seasonal ? "seasonal Holt-Winters" : "Holt linear trend"}, next values ${hw.forecast.slice(0, 6).map((v, i) => `${r.fx[i]}: ${window.QuantAI.fmt(v)} (80% ${window.QuantAI.fmt(hw.lower[i])}–${window.QuantAI.fmt(hw.upper[i])})`).join("; ")}.`); }
-  L.push("", "QUANTAI TOOLS: Data & variables (types, coding), Describe (Table 1), Compare & relate (tests chosen by assumption checks), Regression (linear, logistic, Poisson, modified Poisson), Forecast (Holt-Winters), Log & export (Stata, Python, R, SPSS code).");
+  L.push("", "QUANTAI TOOLS: Data & variables (types, coding, data check), Describe (Table 1), Compare & relate (tests chosen by assumption checks), Regression (linear, logistic, Poisson, modified Poisson, ordinal, multinomial, mixed), Survival (Kaplan-Meier, log-rank, Cox), Forecast (Holt-Winters), Log & export (Stata, Python, R, SPSS code, HTML report).");
   if (extra) L.push("", extra);
   return L.join("\n");
 }
@@ -3612,7 +3861,7 @@ function resolveVar(name, types) {
   if (hit && types && !types.includes(hit.type)) return null;
   return hit || null;
 }
-const ACTION_LABEL = { describe: "Describe", compare: "Compare & relate", regression: "Regression", survival: "Survival analysis", forecast: "Forecast", open: "Open tool" };
+const ACTION_LABEL = { describe: "Describe", compare: "Compare & relate", regression: "Regression", survival: "Survival analysis", forecast: "Forecast", open: "Open tool", check: "Data check", fix: "Data fixes", report: "Report" };
 function addEntry(kind, params, result) {
   const entry = { id: ++S.logSeq, k: S.log.length + 1, kind, params, result };
   S.log.push(entry); S.cur[kind] = entry; S.form[kind] = JSON.parse(JSON.stringify(params)); renumber();
@@ -3631,12 +3880,19 @@ function runAction(a) {
     S.fc = { date: dv ? dv.name : (fcDateVars()[0] ? fcDateVars()[0].name : "__row"), value, h: String(Math.max(1, Math.min(60, parseInt(a.horizon, 10) || 12))), res: null, err: null };
     runForecast(); if (S.fc.err) throw Object.assign(new Error(S.fc.err), { user: true }); return { forecast: true };
   }
+  if (a.type === "check") return { check: true };
+  if (a.type === "fix") { const d = applyAllFixes(); return { check: true, fixed: d }; }
+  if (a.type === "report") { if (!S.log.length) throw Object.assign(new Error("There are no analyses to report yet. Ask me to run one first."), { user: true }); saveFile("quantai-report.html", reportHTML()); return { report: true }; }
   if (a.type === "open") { const t = a.tool; if (METHOD_TOOLS.some(x => x.id === t)) return { nav: ["method", t] }; if (DATA_TOOLS.some(x => x.id === t)) return { nav: ["data", t] }; throw Object.assign(new Error(`There is no "${t}" tool.`), { user: true }); }
   throw Object.assign(new Error("I don't know how to run that yet."), { user: true });
 }
 /** Offline fallback for the most common request when the assistant can't be reached. */
 function localIntent(text) {
   const m = text.match(/(?:compare|difference in|differ(?:ence)?s? in)\s+(.+?)\s+(?:by|between|across|among)\s+(.+?)[?.!]*$/i);
+  if (/\b(check|clean|problems?|issues?|quality)\b.*\b(data|file|dataset)\b|\b(data|file)\b.*\b(check|clean|problems?|issues?)\b/i.test(text)) return { type: "check" };
+  if (/^\s*(fix|apply)\b.*\b(them|all|fixes|problems?|data|it)\b/i.test(text)) return { type: "fix" };
+  if (/\b(download|export|make|create|give)\b.*\breport\b/i.test(text)) return { type: "report" };
+  if (/\b(describe|summari[sz]e|table ?1|overview)\b.*\b(data|sample|variables|dataset)\b/i.test(text)) return { type: "describe", vars: [], group: "" };
   if (m) { const o = resolveVar(m[1]), e = resolveVar(m[2].replace(/^(the )?(groups? of |categories of )/i, "").replace(/\b(men and women|males? and females?)\b/i, "sex")); if (o && e) return { type: "compare", outcome: o.name, exposure: e.name, paired: false }; }
   return null;
 }
@@ -3667,10 +3923,22 @@ async function sendChatMessage(text) {
     else { reply = aiErrText(e.code) + " You can still run any analysis from the Data analysis tools, or try a request like \"compare systolic_bp by sex\"."; action = null; note = "error"; }
   }
   const msg = { role: "assistant", content: reply, action: action || null, note };
-  if (action) {
-    try { const r = runAction(action); msg.ref = r.entry ? r.entry.id : null; msg.forecast = !!r.forecast; if (r.nav) { msg.nav = r.nav; } }
-    catch (err) { msg.content = (reply ? reply + "\n\n" : "") + (err.user ? err.message : "The analysis failed: " + err.message); msg.note = "error"; msg.failed = true; }
-  }
+  const acts = Array.isArray(action) ? action.filter(a => a && typeof a === "object").slice(0, 4) : action ? [action] : [];
+  if (acts.length) msg.action = acts.length === 1 ? acts[0] : acts;
+  const errs = [];
+  acts.forEach(a => {
+    try {
+      const r = runAction(a);
+      if (r.entry) (msg.refs = msg.refs || []).push(r.entry.id);
+      if (r.forecast) msg.forecast = true;
+      if (r.check) msg.check = true;
+      if (r.fixed) msg.content += r.fixed.length ? "\n\n" + r.fixed.map(x => "- " + x).join("\n") : "\n\nThere was nothing that needed an automatic fix.";
+      if (r.report) msg.content += "\n\nThe report (every analysis with its tables, rules and write-up) has been downloaded as **quantai-report.html**. Open it in a browser and print to PDF, or copy the tables into Word.";
+      if (r.nav) msg.nav = r.nav;
+    } catch (err) { errs.push(err.user ? err.message : "The analysis failed: " + err.message); }
+  });
+  if (msg.refs) msg.ref = msg.refs[0];
+  if (errs.length) { msg.content = (msg.content ? msg.content + "\n\n" : "") + errs.join("\n\n"); msg.note = msg.refs || msg.check ? null : "error"; msg.failed = !msg.refs && !msg.check && !msg.forecast; }
   c.messages.push(msg); S.chatBusy = false; saveChats();
   if (msg.nav) { S.section = msg.nav[0]; S.tool[msg.nav[0]] = msg.nav[1]; }
   render();
@@ -3678,6 +3946,8 @@ async function sendChatMessage(text) {
 
 /* ---------- rendering ---------- */
 function chatResultCard(m) {
+  if ((m.refs && m.refs.length > 1) || (m.check && m.ref)) return (m.refs || [m.ref]).map(id => chatResultCard(Object.assign({}, m, { refs: null, ref: id, check: false, forecast: false, action: null }))).join("") + (m.check ? chatResultCard(Object.assign({}, m, { refs: null, ref: null })) : "");
+  if (m.check) return `<div class="qa-result"><div class="res-head"><h3>Data check: ${esc(S.dsSource)}</h3><span class="pill num">${S.ds.nRows} rows · ${S.ds.vars.length} variables</span></div>${qualityHTML(true)}<div class="row"><button class="btn quiet sm" data-act="chat-open" data-sec="data" data-tool="data">Review variable types</button></div></div>`;
   if (m.forecast && S.fc.res) {
     const r = S.fc.res, hw = r.hw, Q = window.QuantAI;
     return `<div class="qa-result"><div class="res-head"><h3>Forecast of ${esc(vlabel(V(r.yv)))}</h3><span class="pill acc">${hw.seasonal ? "Holt-Winters (seasonal)" : "Holt's linear trend"}</span></div>
@@ -3685,7 +3955,7 @@ function chatResultCard(m) {
       <div class="row"><button class="btn quiet sm" data-act="chat-open" data-sec="data" data-tool="forecast">Open the full forecast</button></div></div>`;
   }
   const en = m.ref && S.log.find(x => x.id === m.ref);
-  if (!en) return m.action && !m.failed && m.action.type !== "open" ? `<div class="notice info" style="font-size:.84rem">${esc(ACTION_LABEL[m.action.type] || "Analysis")} from an earlier visit. Results aren't stored, so the data must be loaded again. <button class="btn quiet sm" data-act="chat-rerun" data-i="${esc(JSON.stringify(m.action))}">Run it again</button></div>` : "";
+  if (!en) return m.action && !m.failed && (Array.isArray(m.action) || !["open", "report", "check", "fix"].includes(m.action.type)) ? `<div class="notice info" style="font-size:.84rem">${esc(Array.isArray(m.action) ? m.action.length + " analyses" : ACTION_LABEL[m.action.type] || "Analysis")} from an earlier visit. Results aren't stored, so the data must be loaded again. <button class="btn quiet sm" data-act="chat-rerun" data-i="${esc(JSON.stringify(m.action))}">Run it again</button></div>` : "";
   const r = en.result, main = r.tables.find(t => /coefficient|ratio|Fixed|Hazard|t-test|ANOVA|Kruskal|Mann|chi|Fisher|correlation|McNemar|Wilcoxon|Table 1/i.test(t.title)) || r.tables[0];
   const ex = S.explain[en.id] || {};
   return `<div class="qa-result">
@@ -3706,7 +3976,9 @@ document.addEventListener("click", e => {
   if (act === "chat-starter") { e.preventDefault(); sendChatMessage(el.dataset.text); }
   if (act === "chat-clear") { e.preventDefault(); const c = curChat(); if (c) { c.messages = []; c.title = "New chat"; saveChats(); render(); } }
   if (act === "chat-open") { e.preventDefault(); const id = +el.dataset.id; const en = S.log.find(x => x.id === id); if (en) S.cur[en.kind] = en; S.section = el.dataset.sec; S.tool[el.dataset.sec] = el.dataset.tool; render(); const mm = document.getElementById("qa-main"); if (mm) mm.scrollTop = 0; }
-  if (act === "chat-rerun") { e.preventDefault(); const a = JSON.parse(el.dataset.i), c = curChat(); try { const r = runAction(a); c.messages.push({ role: "assistant", content: `Ran ${ACTION_LABEL[a.type] || "the analysis"} again with the current data.`, action: a, ref: r.entry ? r.entry.id : null, forecast: !!r.forecast }); } catch (err) { c.messages.push({ role: "assistant", content: err.message, note: "error" }); } saveChats(); render(); }
+  if (act === "chat-rerun") { e.preventDefault(); const a0 = JSON.parse(el.dataset.i), c = curChat(), list = Array.isArray(a0) ? a0 : [a0], refs = []; let fc = false, ck = false; const errs = [];
+    list.forEach(a => { try { const r = runAction(a); if (r.entry) refs.push(r.entry.id); fc = fc || !!r.forecast; ck = ck || !!r.check; } catch (err) { errs.push(err.message); } });
+    c.messages.push({ role: "assistant", content: (refs.length || fc || ck ? `Ran ${list.length > 1 ? "the " + list.length + " analyses" : ACTION_LABEL[list[0].type] || "the analysis"} again with the current data.` : "") + (errs.length ? "\n\n" + errs.join("\n\n") : ""), action: a0, refs, ref: refs[0] || null, forecast: fc, check: ck, note: refs.length || fc || ck ? null : "error" }); saveChats(); render(); }
 });
 document.addEventListener("submit", e => {
   if (e.target.id !== "qa-chat-form") return;
@@ -3719,10 +3991,24 @@ document.addEventListener("change", async e => {
   if (e.target.id !== "qa-chat-file" || !e.target.files[0]) return;
   const f = e.target.files[0]; e.target.value = "";
   await readFile(f);
-  const c = curChat() || newChat();
-  c.messages.push(S.errors.data ? { role: "assistant", content: S.errors.data, note: "error" } : { role: "assistant", content: `Loaded **${f.name}**: ${S.ds.nRows} rows and ${S.ds.vars.length} variables. Check the variable types in Data & variables if anything looks wrong, then ask me what you'd like to analyse.` });
-  saveChats(); render();
+  pushUploadMessage(f.name);
+  render();
 });
+
+/** After an upload: say what was read, what was fixed automatically, and what needs a decision. */
+function pushUploadMessage(fname) {
+  const c = curChat() || newChat();
+  if (S.errors.data) { c.messages.push({ role: "assistant", content: S.errors.data, note: "error" }); saveChats(); return; }
+  const q = S.quality || [], warn = q.filter(x => x.sev === "warn"), fixable = q.filter(x => x.fix);
+  const types = {}; S.ds.vars.forEach(v => { types[v.type] = (types[v.type] || 0) + 1; });
+  const tl = ["continuous", "count", "binary", "categorical", "ordinal", "id"].filter(t => types[t]).map(t => `${types[t]} ${t === "id" ? "ignored (IDs or free text)" : t}`).join(", ");
+  if (c.title === "New chat") c.title = fname;
+  let text = `Loaded **${fname}**: ${S.ds.nRows.toLocaleString()} rows and ${S.ds.vars.length} variables (${tl}).\n\n`;
+  text += warn.length ? `I checked the file and found **${warn.length} thing${warn.length > 1 ? "s" : ""} to review** before analysing${fixable.length ? `; ${fixable.length === 1 ? "one has" : fixable.length + " have"} a one-click fix, or say "fix them"` : ""}.` : "I checked the file and found nothing that needs fixing.";
+  text += " Then ask me what you'd like to find out.";
+  c.messages.push({ role: "assistant", content: text, check: true, action: { type: "check" } });
+  saveChats();
+}
 
 /* =====================================================================
    QuantAI app shell (website build): a full-screen chat layout.
@@ -3841,7 +4127,7 @@ document.addEventListener("change", async e => {
   if (e.target.id !== "qa-side-file" || !e.target.files[0]) return;
   const f = e.target.files[0]; e.target.value = ""; S.sideOpen = false;
   await readFile(f);
-  if (!S.errors.data) { const c = curChat() || newChat(); c.messages.push({ role: "assistant", content: `Loaded **${f.name}**: ${S.ds.nRows} rows and ${S.ds.vars.length} variables. Check the variable types under Analyse data → Data & variables if anything looks wrong, then ask me what you'd like to find out.` }); saveChats(); S.section = "chat"; }
+  if (!S.errors.data) { pushUploadMessage(f.name); S.section = "chat"; }
   render();
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape" && S.sideOpen) { S.sideOpen = false; render(); } });
