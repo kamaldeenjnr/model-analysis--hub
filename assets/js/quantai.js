@@ -2344,7 +2344,7 @@ function resultCard(entry) {
     </div>
     <div class="stack">${r.tables.map(tableHTML).join("")}</div>
     ${r.writeup ? `<section class="stack" style="gap:.5rem"><div class="row" style="justify-content:space-between;align-items:center"><div class="sect-t" style="margin:0">Write-up (APA 7)</div><button class="btn quiet sm" data-act="copy-apa" data-id="${entry.id}">Copy text</button></div><p class="apa">${esc(r.writeup)}</p></section>` : ""}
-    
+    ${aiExplainHTML(entry)}
     <section class="stack" style="gap:.5rem"><div class="sect-t" style="margin:0">Code to reproduce this analysis by hand</div>
       <p class="sub">A complete script: loads <code class="n">analysis_data.csv</code> (Log &amp; export), codes variables exactly as here, runs the assumption checks, then the chosen test.</p>
       ${codeBlock(scriptsForEntries([{ spec: r.spec, title: r.title }]))}</section>
@@ -2792,7 +2792,7 @@ function render() {
   const tools = S.section === "method" ? METHOD_TOOLS : DATA_TOOLS, cur = S.tool[S.section];
   $("#qa-rail").innerHTML = `<div class="rail-group"><h4>${S.section === "method" ? "Methodology" : "Data analysis"}</h4><nav aria-label="Tools">${tools.map(t => `<button data-act="tool" data-v="${t.id}" ${t.id === cur ? 'aria-current="page"' : ""}><span class="k">${t.k}</span><span>${esc(t.label)}</span><small>${esc(t.sub)}</small></button>`).join("")}</nav></div>
     <p class="rail-note">${S.section === "method" ? "Rule-based: the same answers always give the same advice." : `${S.log.length} analys${S.log.length === 1 ? "is" : "es"} in the log. Data never leave this tab.`}</p>`;
-  const pages = { question: pageQuestion, design: pageDesign, sample: pageSample, test: pageTest, checklist: pageChecklist, forecast: pageForecast, data: pageData, describe: pageDescribe, compare: pageCompare, regression: pageRegression, export: pageExport, rules: pageRules };
+  const pages = { question: pageQuestion, design: pageDesign, sample: pageSample, test: pageTest, checklist: pageChecklist, forecast: pageForecast, ask: pageAsk, askm: pageAskMethods, data: pageData, describe: pageDescribe, compare: pageCompare, regression: pageRegression, export: pageExport, rules: pageRules };
   $("#qa-main").innerHTML = (pages[cur] || pages.question)();
   persist();
 }
@@ -3029,6 +3029,133 @@ document.addEventListener("change", e => {
 
 const _loadDatasetBase = loadDataset;
 loadDataset = function () { S.fc = { date: "", value: "", h: "", res: null, err: null }; return _loadDatasetBase.apply(this, arguments); };
+
+/* =====================================================================
+   AI assistant (website build): answers through the Model Analysis Hub
+   Cloudflare worker (Groq). Only statistical summaries and results are
+   sent — never the uploaded file. Every number still comes from the
+   deterministic engine; the assistant only explains.
+   ===================================================================== */
+const AI_URL = "https://mah-assistant.kamalamadu8.workers.dev";
+const AI_PRIVACY = "Your question and a statistical summary (never your file) are sent to the Model Analysis Hub assistant. Numbers come from QuantAI's own calculations; the assistant only explains them, so check anything important.";
+DATA_TOOLS.splice(DATA_TOOLS.findIndex(t => t.id === "export"), 0, { id: "ask", k: "AI", label: "Ask QuantAI", sub: "Questions about your data" });
+METHOD_TOOLS.push({ id: "askm", k: "AI", label: "Ask about methods", sub: "Design, sample size, tests" });
+S.chat = { data: [], methods: [], busy: {}, err: {} };
+S.explain = {};
+
+const aiErrText = code => ({ rate_limited: "You've asked a lot of questions in a short time. Wait a few minutes and try again.", busy: "The assistant is busy right now. Try again in a minute.", not_configured: "The assistant isn't set up yet.", network: "The assistant couldn't be reached. Check your connection; all other tools still work." })[code] || "The assistant couldn't answer right now. All other tools still work.";
+async function askAI(mode, context, messages) {
+  let res;
+  try {
+    res = await fetch(AI_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, context: context.slice(0, 7900), messages: messages.slice(-10).map(m => ({ role: m.role, content: m.content.slice(0, 590) })) }) });
+  } catch (e) { throw Object.assign(new Error("network"), { code: "network" }); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.reply) throw Object.assign(new Error(data.error || "failed"), { code: data.error || "failed" });
+  return data.reply;
+}
+/** Minimal, safe formatting: escape, then **bold**, paragraphs and simple list lines. */
+function aiFormat(text) {
+  return esc(text).split(/\n{2,}/).map(par => {
+    const lines = par.split("\n");
+    if (lines.every(l => /^\s*([-*•]|\d+[.)])\s+/.test(l))) return `<ul class="clean">${lines.map(l => `<li>${l.replace(/^\s*([-*•]|\d+[.)])\s+/, "")}</li>`).join("")}</ul>`;
+    return `<p>${lines.join("<br>")}</p>`;
+  }).join("").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+}
+
+/* ---------- context builders (summaries only) ---------- */
+function dataContext(extra) {
+  const ds = S.ds, L = [];
+  L.push(`DATASET: ${S.dsSource}; ${ds.nRows} rows; significance level ${S.alpha}.`);
+  L.push("VARIABLES (name in code | original name | type | missing | summary):");
+  ds.vars.filter(v => v.type !== "id").forEach(v => L.push(`- ${v.name} | ${v.label} | ${v.type} | ${v.nMissing} missing | ${summaryOf(v)}`));
+  const log = S.log.slice(-6);
+  if (log.length) {
+    L.push("", "ANALYSES ALREADY RUN IN QUANTAI (results are exact):");
+    log.forEach(e => { const r = e.result; L.push(`${e.k}. ${r.title} — ${r.method}; n = ${r.n}. ${r.writeup || ""}`); r.decision.filter(d => d.ok === false).forEach(d => L.push(`   warning: ${d.rule}: ${d.detail}`)); });
+  }
+  if (S.fc && S.fc.res) { const r = S.fc.res, hw = r.hw; L.push("", `FORECAST: ${r.yv}, ${r.ts.y.length} points, ${hw.seasonal ? "seasonal Holt-Winters" : "Holt linear trend"}, next values ${hw.forecast.slice(0, 6).map((v, i) => `${r.fx[i]}: ${window.QuantAI.fmt(v)} (80% ${window.QuantAI.fmt(hw.lower[i])}–${window.QuantAI.fmt(hw.upper[i])})`).join("; ")}.`); }
+  L.push("", "QUANTAI TOOLS: Data & variables (types, coding), Describe (Table 1), Compare & relate (tests chosen by assumption checks), Regression (linear, logistic, Poisson, modified Poisson), Forecast (Holt-Winters), Log & export (Stata, Python, R, SPSS code).");
+  if (extra) L.push("", extra);
+  return L.join("\n");
+}
+function resultContext(r) {
+  return [`RESULT TO EXPLAIN: ${r.title}`, `Method chosen: ${r.method}; n = ${r.n}`, "Rules QuantAI applied:", ...r.decision.map(d => `- ${d.rule}: ${d.detail}`),
+    ...r.tables.map(t => `${t.title}\n${t.columns.join(" | ")}\n${t.rows.slice(0, 14).map(x => x.join(" | ")).join("\n")}`), `APA summary: ${r.writeup}`, ...r.warnings.map(w => `Note: ${w}`)].join("\n");
+}
+function methodsContext() {
+  const m = S.m, L = ["The visitor is planning a study in QuantAI's methodology tools. Their current inputs:"];
+  const q = m.question, fw = Method.FRAMEWORKS[q.fw]; L.push(`Research question framework ${q.fw}: ` + fw.fields.map(([k, label, ex]) => `${label} = ${getPath(q.v, q.fw + "." + k) || ex + " (example)"}`).join("; "));
+  const d = Method.DESIGN_QUESTIONS.filter(x => m.design.a[x.id]).map(x => `${x.q} → ${(x.options.find(o => o[0] === m.design.a[x.id]) || [])[1]}`);
+  if (d.length) { L.push("Design answers: " + d.join("; ")); const r = Method.decideDesign(m.design.a); if (r) L.push(`Rule-based design recommendation: ${r.design.name}. Alternatives: ${r.alternatives.map(a => a.design.name).join(", ") || "none"}.`); }
+  const sc = Method.SAMPLE.find(x => x.id === m.sample.id); if (sc) L.push(`Sample size calculator selected: ${sc.name}; inputs ${JSON.stringify(sampleVals(m.sample, sc))}; adjustments ${JSON.stringify(m.sample.adj)}.`);
+  const t = Method.selectTest(m.test.a); if (t && t.id) L.push(`Test selector result: ${t.test.name}${t.alternative ? `; alternative ${t.alternative.test.name}` : ""}.`);
+  L.push("QuantAI methodology tools: Research question, Study design, Sample size, Choose a test, Reporting checklist (STROBE, CONSORT, STARD, COREQ, PRISMA).");
+  return L.join("\n");
+}
+
+/* ---------- chat pages ---------- */
+const DATA_STARTERS = ["Which results here are statistically significant?", "Which test should I use next for my research question?", "How do I report these results in my thesis?", "Are there data-quality problems I should fix first?"];
+const METHOD_STARTERS = ["Is my design right for my research question?", "How do I justify my sample size?", "What are the main biases in my design and how do I reduce them?", "Which statistical analysis matches my objectives?"];
+function chatPanel(kind, starters, placeholder) {
+  const log = S.chat[kind], busy = S.chat.busy[kind], err = S.chat.err[kind];
+  return `<div class="card stack">
+    <div class="stack" style="gap:.8rem" aria-live="polite">${log.length ? log.map(m => m.role === "user"
+      ? `<div style="align-self:flex-end;max-width:85%;background:var(--accent);color:var(--accent-ink);padding:.55rem .85rem;border-radius:12px 12px 2px 12px">${esc(m.content)}</div>`
+      : `<div style="max-width:92%;background:var(--surface-2);padding:.7rem .9rem;border-radius:12px 12px 12px 2px" class="stack">${aiFormat(m.content)}</div>`).join("")
+      : `<p class="sub">Ask in your own words, or start with one of these:</p>`}
+      ${busy ? `<div class="sub"><span class="spin"></span> Thinking…</div>` : ""}</div>
+    ${!log.length ? `<div class="chips">${starters.map(s => `<button class="chip" data-act="ai-starter" data-kind="${kind}" data-text="${esc(s)}">${esc(s)}</button>`).join("")}</div>` : ""}
+    ${err ? `<div class="notice bad">${esc(err)}</div>` : ""}
+    <form class="row" data-ai-form="${kind}" style="flex-wrap:nowrap"><div class="field" style="flex:1"><label class="label" for="ai-q-${kind}">Your question</label><input type="text" id="ai-q-${kind}" maxlength="580" placeholder="${esc(placeholder)}" autocomplete="off"></div><button class="btn" type="submit" ${busy ? "disabled" : ""}>Ask</button></form>
+    <div class="row" style="justify-content:space-between;align-items:center"><p class="sub muted" style="font-size:.76rem;max-width:70ch">${esc(kind === "data" ? AI_PRIVACY : "Your question and what you entered in the methodology tools are sent to the Model Analysis Hub assistant. Treat its answers as advice to check, not a final decision.")}</p>${log.length ? `<button class="btn quiet sm" data-act="ai-clear" data-kind="${kind}">Clear chat</button>` : ""}</div>
+  </div>`;
+}
+function pageAsk() {
+  return pageHead("Data analysis · AI", "Ask QuantAI", "Ask questions about your data and the analyses you've run. The assistant sees variable summaries and your results, not the file, and answers in plain language.") + exampleBanner() + chatPanel("data", DATA_STARTERS, "e.g. What does the regression tell me about BMI?");
+}
+function pageAskMethods() {
+  return pageHead("Methodology · AI", "Ask about methods", "Ask about study design, sampling, sample size, bias or analysis plans. The assistant sees what you've entered in the other methodology tools, so it can answer for your study.") + chatPanel("methods", METHOD_STARTERS, "e.g. Should I use a cohort or a cross-sectional design?");
+}
+async function sendChat(kind, text) {
+  text = (text || "").trim(); if (!text || S.chat.busy[kind]) return;
+  S.chat[kind].push({ role: "user", content: text }); S.chat.busy[kind] = true; S.chat.err[kind] = null; render();
+  try {
+    const reply = await askAI(kind === "data" ? "data" : "methods", kind === "data" ? dataContext() : methodsContext(), S.chat[kind]);
+    S.chat[kind].push({ role: "assistant", content: reply });
+  } catch (e) { S.chat[kind].pop(); S.chat.err[kind] = aiErrText(e.code); }
+  S.chat.busy[kind] = false; render();
+  const inp = document.getElementById("ai-q-" + kind); if (inp && !S.chat.err[kind]) inp.focus();
+}
+
+/* ---------- explain button on result cards ---------- */
+function aiExplainHTML(entry) {
+  const st = S.explain[entry.id] || {};
+  return `<section class="stack" style="gap:.5rem"><div class="row" style="justify-content:space-between;align-items:center"><div class="sect-t" style="margin:0">Plain-language explanation (AI)</div>
+    <button class="btn ghost sm" data-act="ai-explain" data-id="${entry.id}" ${st.busy ? "disabled" : ""}>${st.busy ? '<span class="spin"></span> Explaining…' : st.text ? "Explain again" : "Explain in plain language"}</button></div>
+    ${st.err ? `<div class="notice bad">${esc(st.err)}</div>` : ""}
+    ${st.text ? `<div class="stack" style="background:var(--surface-2);padding:.8rem 1rem;border-radius:10px">${aiFormat(st.text)}</div><p class="sub muted" style="font-size:.76rem">The assistant explains QuantAI's numbers; it did not calculate them.</p>` : ""}</section>`;
+}
+async function explainResult(id) {
+  const en = S.log.find(x => x.id === id); if (!en) return;
+  const st = S.explain[id] = { busy: true };
+  render();
+  try {
+    st.text = await askAI("data", dataContext(resultContext(en.result)), [{ role: "user", content: "Explain the RESULT TO EXPLAIN in plain language for a student writing a thesis: what was tested and why this method was chosen (from the rules), what the result means in practice, and two cautions. Use only the numbers given. 120 to 200 words." }]);
+  } catch (e) { st.err = aiErrText(e.code); }
+  st.busy = false; render();
+}
+
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]"); if (!el) return;
+  const act = el.dataset.act;
+  if (act === "ai-starter") { e.preventDefault(); sendChat(el.dataset.kind, el.dataset.text); }
+  if (act === "ai-clear") { e.preventDefault(); S.chat[el.dataset.kind] = []; S.chat.err[el.dataset.kind] = null; render(); }
+  if (act === "ai-explain") { e.preventDefault(); explainResult(+el.dataset.id); }
+});
+document.addEventListener("submit", e => {
+  const f = e.target.closest("[data-ai-form]"); if (!f) return;
+  e.preventDefault(); const kind = f.dataset.aiForm, inp = f.querySelector("input"); sendChat(kind, inp.value);
+});
 
 /* ---------- start-up ---------- */
 function start() {

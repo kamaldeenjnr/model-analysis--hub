@@ -26,7 +26,7 @@
     { id: 'quantai', words: 'quantai quant ai tool analyse analyze upload spreadsheet csv excel data statistics forecast regression correlation',
       a: '<b>QuantAI</b> is a free research and statistics tool on this site. It helps plan a study (design, sample size, which test), then analyses a CSV or Excel file: it checks the assumptions, picks the right test, fits regression models and forecasts, and exports the same analysis as Stata, Python, R and SPSS code. Your file stays on your device. <a href="ai.html">Open QuantAI</a>.' },
     { id: 'privacy', words: 'privacy private safe secure data upload stored store server confidential',
-      a: 'QuantAI does all its calculations inside your browser, so your file is never uploaded or saved, and no AI service sees your data.' },
+      a: 'QuantAI does all its calculations inside your browser, so your file is never uploaded or saved. If you use its optional AI assistant, only your question and a statistical summary are sent, never the file.' },
     { id: 'skills', words: 'skills tools stack languages technologies python r javascript react sql arcgis numpy tech',
       a: 'Main tools: <b>Python</b> and <b>R</b> for statistics and modelling (NumPy, SciPy), <b>ArcGIS</b> for maps, and <b>JavaScript</b>, <b>React</b> and <b>SQL</b> for web platforms and dashboards.' },
     { id: 'location', words: 'where location based country ghana africa city remote',
