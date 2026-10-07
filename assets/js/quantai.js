@@ -960,6 +960,7 @@ const Data = (function () {
         fixes.push(`Set ${nonNum.length} text entr${nonNum.length > 1 ? "ies" : "y"} in a numeric column to missing: ${nonNumU.map(x => `"${x}"`).join(", ")}.`);
       }
       const cm = mergeCase(vals); if (cm) { vals = cm.vals; fixes.push(cm.note); }
+      const sy = mergeSynonyms(vals); if (sy) { vals = sy.vals; fixes.push(sy.note); }
       const v = makeVar(names[j], h, vals, opts);
       v.fixes = fixes;
       return v;
@@ -985,6 +986,42 @@ const Data = (function () {
     if (!changed || ok < 0.9 * present.length || ok < present.length - 5 || pre.size > 2 || suf.size > 2) return null;
     const unit = shown.join(" ");
     return { vals: out, note: `Read as numbers${unit ? ` after removing "${unit}"` : ""} and thousands separators.` };
+  }
+  /** Short forms and punctuation variants that mean the same answer:
+      Y/N → Yes/No, M/F → Male/Female, "S.H.S" = "SHS", "Don't know" = "Dont know". */
+  const SYN_SETS = [
+    { canon: { yes: "Yes", no: "No" }, map: { y: "yes", yes: "yes", yeah: "yes", yea: "yes", true: "yes", n: "no", no: "no", nope: "no", false: "no" } },
+    { canon: { male: "Male", female: "Female" }, map: { m: "male", male: "male", man: "male", men: "male", boy: "male", f: "female", female: "female", woman: "female", women: "female", girl: "female", fem: "female" } },
+  ];
+  function mergeSynonyms(vals) {
+    const present = vals.filter(v => v !== null);
+    if (!present.length || present.every(isNum)) return null;
+    const low = v => v.toLowerCase().trim();
+    const notes = [];
+    let out = vals;
+    // 1) whole-column answer sets (only when every value belongs to the set, so other meanings of "N" or "F" are left alone)
+    for (const set of SYN_SETS) {
+      const keys = new Set(present.map(low));
+      if (![...keys].every(k => k in set.map)) continue;
+      const targets = new Set([...keys].map(k => set.map[k]));
+      if (targets.size < 2 && keys.size < 2) continue;
+      const before = new Set(present);
+      out = vals.map(v => v === null ? null : set.canon[set.map[low(v)]]);
+      const changed = [...before].filter(x => x !== set.canon[set.map[low(x)]]);
+      if (changed.length) notes.push(`Read ${changed.map(x => `"${x}"`).join(", ")} as ${[...targets].map(t => `"${set.canon[t]}"`).join(" / ")}`);
+      break;
+    }
+    // 2) spellings that differ only in dots, spaces, hyphens or apostrophes ("S.H.S" = "SHS", "Don't know" = "Dont know")
+    const pres2 = out.filter(v => v !== null), key = v => v.toLowerCase().replace(/[.\s\-_'’]+/g, "");
+    const groups = new Map();
+    pres2.forEach(v => { const k = key(v); if (!k) return; if (!groups.has(k)) groups.set(k, new Map()); const g = groups.get(k); g.set(v, (g.get(v) || 0) + 1); });
+    const multi = [...groups.values()].filter(g => g.size > 1);
+    if (multi.length && groups.size <= 50) {
+      const canon = new Map(); groups.forEach((g, k) => canon.set(k, [...g.entries()].sort((a, b) => b[1] - a[1])[0][0]));
+      out = out.map(v => v === null ? null : (canon.get(key(v)) || v));
+      notes.push(`Merged ${multi.slice(0, 3).map(g => [...g.keys()].map(x => `"${x}"`).join(" = ")).join("; ")}`);
+    }
+    return notes.length ? { vals: out, note: notes.join(". ") + "." } : null;
   }
   /** "Yes", "yes", "YES " → one spelling (the most common). */
   function mergeCase(vals) {
@@ -1174,7 +1211,8 @@ const Data = (function () {
         const nums = pres.map(Number), srt = [...nums].sort((a, b) => a - b), q1 = quantile(srt, 0.25), q3 = quantile(srt, 0.75), iqr = q3 - q1;
         // missing-value codes such as 99 or 999 hiding as real numbers
         const cnt = new Map(); nums.forEach(x => cnt.set(x, (cnt.get(x) || 0) + 1));
-        const codes = MISS_CODES.filter(c => cnt.has(c) && (v.type === "continuous" || v.type === "count" ? (iqr > 0 ? (c > q3 + 3 * iqr || c < q1 - 3 * iqr) : c !== srt[Math.floor(srt.length / 2)]) : (v.levels && Math.abs(c) >= 9 && (() => { const others = srt.filter(x => !MISS_CODES.includes(x)); return others.length && (c > Math.max(...others) + 1 || c < Math.min(...others) - 1); })())));
+        const nonCode = srt.filter(x => !MISS_CODES.includes(x) && (iqr <= 0 || x <= q3 + 3 * iqr)), topReal = nonCode.length ? nonCode[nonCode.length - 1] : Infinity;
+        const codes = MISS_CODES.filter(c => cnt.has(c) && (v.type === "continuous" || v.type === "count" ? (iqr > 0 ? (c > q3 + 3 * iqr || c < q1 - 3 * iqr || (c >= 98 && cnt.get(c) >= 2 && c > topReal + 5)) : c !== srt[Math.floor(srt.length / 2)]) : (v.levels && Math.abs(c) >= 9 && (() => { const others = srt.filter(x => !MISS_CODES.includes(x)); return others.length && (c > Math.max(...others) + 1 || c < Math.min(...others) - 1); })())));
         if (codes.length) add("warn", `${v.label} contains ${codes.map(c => `${c} (${cnt.get(c)}×)`).join(", ")}, far outside its other values. This is usually a code for "missing" or "don't know"; left as a number it distorts means and tests.`, { var: v.name, fix: { kind: "missing", var: v.name, codes: codes.map(String) }, fixLabel: `Treat ${codes.join(", ")} as missing` });
         const real = nums.filter(x => !codes.includes(x)); let impossible = new Set();
         // impossible values for well-known measurements
@@ -4001,7 +4039,7 @@ const DIRECT_REPLY = {
   report: () => "Preparing your report.",
 };
 function OFFLINE_HELP() {
-  const vs = varsUsable(), demo = /\b(sex|gender|male|female|age)\b|_id$|\bid\b/i, nums = vs.filter(v => v.type === "continuous" && !demo.test(v.name + " " + v.label)), num = nums[0] || vs.find(v => v.type === "continuous"), cat = vs.find(v => ["binary", "categorical"].includes(v.type) && /\b(sex|gender)\b/i.test(v.name + " " + v.label)) || vs.find(v => ["binary", "categorical"].includes(v.type)), bins = vs.filter(v => v.type === "binary" && !demo.test(v.name + " " + v.label) && v !== cat), bin = bins.find(v => /hypertens|diabet|disease|status|outcome|positive|diagnos|infect|malaria|death|died|pass|default|anaemi|stunt/i.test(v.name + " " + v.label)) || bins[0];
+  const vs = varsUsable(), demo = /\b(sex|gender|male|female|age)\b|_id$|\bid\b/i, nums = vs.filter(v => v.type === "continuous" && !demo.test(v.name + " " + v.label)), num = nums[0] || vs.find(v => v.type === "continuous"), cat = vs.find(v => ["binary", "categorical"].includes(v.type) && /\b(sex|gender)\b/i.test(v.name + " " + v.label)) || vs.find(v => ["binary", "categorical"].includes(v.type)), bins = vs.filter(v => v.type === "binary" && !demo.test(v.name + " " + v.label) && v !== cat), bin = mainOutcome() || bins[0];
   const ex = [num && cat ? `compare ${vlabel(num)} by ${vlabel(cat)}` : null, bin ? `risk factors for ${vlabel(bin)}` : null, "describe my data", "check my data for problems"].filter(Boolean);
   return { text: "I couldn't work that one out on my own, and the AI assistant isn't answering right now. Here's what I can do straight away: tap one, or attach your own data with the clip.", suggest: ex, tools: [["method", "question", "Plan a study: research question"], ["method", "design", "Choose a study design"], ["method", "sample", "Work out a sample size"]] };
 }
@@ -4043,6 +4081,28 @@ function localIntent(text) {
   if (/^\s*(fix|apply)\b.*\b(them|all|fixes|problems?|data|it)\b/i.test(text)) return { type: "fix" };
   if (/\b(download|export|make|create|give)\b.*\breport\b/i.test(text)) return { type: "report" };
   if (/\b(describe|summari[sz]e|table ?1|overview|summary)\b/i.test(text)) { const g = text.match(/\bby\s+(.+?)[?.!]*$/i), gv = g ? resolveVar(clean(g[1]), ["binary", "categorical"]) : null; return { type: "describe", vars: [], group: gv ? gv.name : "" }; }
+  // whole-dataset requests: check, Table 1, then the main outcome's associated factors
+  if (/\b(analy[sz]e|analysis of|run (an )?analysis on|work on|look (at|into)|go through|examine|explore)\b.*\b(my|the|this|whole|entire|all)?\s*(data|dataset|file|survey|everything)\b|\bfull analysis\b|\banaly[sz]e (it|everything)\b/i.test(t)) {
+    const g = mainGroup(), o = mainOutcome(), acts = [{ type: "check" }, { type: "describe", vars: [], group: (o || g) ? (o || g).name : "" }];
+    if (o) {
+      const preds = varsUsable().filter(v => v.name !== o.name && ["binary", "categorical", "continuous", "count", "ordinal"].includes(v.type) && !/time|date|comment|remark|_id$/i.test(v.name) && (v.nMissing || 0) < S.ds.nRows * 0.3 && !(v.levels && v.levels.length > 8)).slice(0, 7).map(v => v.name);
+      if (preds.length) acts.push({ type: "regression", outcome: o.name, predictors: preds, model: "auto" });
+    }
+    return acts;
+  }
+  // "is X associated / related / linked with Y", "relationship between X and Y", "does X affect Y"
+  const am = t.match(/(?:is|are|does|do)\s+(?:there\s+(?:an?\s+)?(?:association|relationship|link)\s+between\s+)?(.+?)\s+(?:associated|related|linked|correlated|connected)\s+(?:with|to)\s+(.+?)[?.!]*$/i)
+    || t.match(/(?:association|relationship|link|correlation)\s+between\s+(.+?)\s+and\s+(.+?)[?.!]*$/i)
+    || t.match(/^(?:does|do|did|can)\s+(.+?)\s+(?:affect|influence|predict|determine|impact)\s+(.+?)[?.!]*$/i);
+  if (am) {
+    let a = resolveVar(clean(am[1])), b = resolveVar(clean(am[2]));
+    if (a && b && a.name !== b.name) {
+      if (/affect|influence|predict|determine|impact/i.test(t) && /^(does|do|did|can)/i.test(t)) [a, b] = [b, a];   // "does X affect Y": Y is the outcome
+      const num = x => ["continuous", "count"].includes(x.type);
+      if (!num(a) && num(b)) [a, b] = [b, a];   // a numeric variable is compared across the groups of the other
+      return { type: "compare", outcome: a.name, exposure: b.name, paired: false };
+    }
+  }
   // "is X higher in/among Y", "does X differ by Y", "X vs Y"
   const dm = t.match(/(?:is|are|does|do)\s+(.+?)\s+(?:higher|lower|different|differ|more|less|greater)\s+(?:in|among|for|by|between|across)\s+(.+?)[?.!]*$/i) || t.match(/^(.+?)\s+(?:vs\.?|versus)\s+(.+?)[?.!]*$/i);
   if (dm) { const o = resolveVar(clean(dm[1])), e = resolveVar(clean(dm[2])); if (o && e && o.name !== e.name) return { type: "compare", outcome: o.name, exposure: e.name, paired: false }; }
@@ -4070,10 +4130,11 @@ async function sendChatMessage(text) {
   const deeper = /^in more depth:\s*/i.test(text);
   const kbFirst = !deeper && KB_TRIGGER.test(text) ? kbAnswer(text) : null;
   const direct = kbFirst || deeper ? null : localIntent(text);
-  if (kbFirst) {
+  if (Array.isArray(direct)) { reply = "Here is a full first pass: a check of the file, a summary table, and the factors associated with the main outcome. Ask me to compare anything else, or tap \"Open full result and code\" on any result."; action = direct; }
+  else if (kbFirst) {
     reply = kbFirst.a; action = null;
     helpExtra = { suggest: kbRelated(kbFirst).concat(["In more depth: " + text]), tools: kbFirst.tool ? [kbFirst.tool] : [] };
-  } else if (direct) {
+  } else if (direct && !Array.isArray(direct)) {
     reply = DIRECT_REPLY[direct.type] ? DIRECT_REPLY[direct.type](direct) : "Done.";
     action = direct;
   } else try {
@@ -4158,19 +4219,39 @@ document.addEventListener("change", async e => {
   render();
 });
 
+const OUTCOME_RE = /hypertens|diabet|disease|status|outcome|positive|diagnos|infect|malaria|death|died|pass|default|anaemi|anemi|stunt|wasting|underweight|obes|overweight|complication|adheren|compliance|uptake|utili[sz]|satisf|depress|anxiety|stress|delivery|vaccin|immuni[sz]|test(ed)?|screen|use of|using|practice|knowledge|awareness/i;
+const DEMO_RE = /\b(sex|gender|male|female|age|marital|religion|ethnic|tribe|occupation|region|district|residence|education|income|household|name|phone|date|comment|remark|interviewer)\b|_id$|\bid\b|s\/n/i;
+/** The variable a study is most likely about: a yes/no question such as "Do you have hypertension?". */
+function mainOutcome() {
+  const vs = varsUsable(), bins = vs.filter(v => v.type === "binary");
+  const txt = v => v.name + " " + v.label;
+  return bins.find(v => /^(do|did|have|has|are|is|were|was)\b/i.test(v.label) && OUTCOME_RE.test(txt(v)) && !DEMO_RE.test(txt(v)))
+    || bins.find(v => OUTCOME_RE.test(txt(v)) && !DEMO_RE.test(txt(v)) && !/knowledge|q\d/i.test(txt(v)))
+    || bins.find(v => /^(do|did|have|has|are|is|were|was)\b/i.test(v.label) && !DEMO_RE.test(txt(v)))
+    || bins.find(v => !DEMO_RE.test(txt(v))) || null;
+}
+const mainGroup = () => varsUsable().find(v => ["binary", "categorical"].includes(v.type) && /\b(sex|gender)\b/i.test(v.name + " " + v.label)) || null;
+/** A real time series: one row per date (monthly sales, weekly cases), not survey interview dates. */
+function isTimeSeries() {
+  const d = fcDateVars()[0]; if (!d) return false;
+  const vals = d.values.filter(x => x !== null && x !== undefined), u = new Set(vals.map(String));
+  return vals.length >= 8 && u.size >= 0.9 * vals.length;
+}
 /** Questions that make sense for the loaded file. */
 function dataSuggestions(fixable) {
   const vs = varsUsable(), demo = /\b(sex|gender|male|female|age)\b|_id$|\bid\b/i;
   const num = vs.filter(v => v.type === "continuous" && !demo.test(v.name + " " + v.label))[0] || vs.find(v => v.type === "continuous");
   const grp = vs.find(v => ["binary", "categorical"].includes(v.type) && /\b(sex|gender)\b/i.test(v.name + " " + v.label)) || vs.find(v => ["binary", "categorical"].includes(v.type));
-  const bins = vs.filter(v => v.type === "binary" && v !== grp && !demo.test(v.name + " " + v.label));
+  const outc = mainOutcome();
   const out = [];
   if (fixable) out.push("Fix them");
+  out.push("Analyse my data");
   out.push("Describe my data" + (grp ? " by " + vlabel(grp) : ""));
-  if (num && grp) out.push(`Compare ${vlabel(num)} by ${vlabel(grp)}`);
-  if (bins.length) out.push(`What factors are associated with ${vlabel(bins[0])}?`);
+  if (outc) out.push(`What factors are associated with ${vlabel(outc)}`);
   else if (num) out.push(`What affects ${vlabel(num)}?`);
-  if (fcDateVars().length && num) out.push(`Forecast ${vlabel(num)}`);
+  if (outc && grp && outc !== grp) out.push(`Is ${vlabel(outc).replace(/^(do you have|have you|are you)\s+/i, "").replace(/\?$/, "")} associated with ${vlabel(grp)}?`);
+  else if (num && grp) out.push(`Compare ${vlabel(num)} by ${vlabel(grp)}`);
+  if (isTimeSeries() && num) out.push(`Forecast ${vlabel(num)}`);
   return out.slice(0, 5);
 }
 /** After an upload: say what was read, what was fixed automatically, and what needs a decision. */
