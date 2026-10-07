@@ -3926,13 +3926,96 @@ function addEntry(kind, params, result) {
   S.log.push(entry); S.cur[kind] = entry; S.form[kind] = JSON.parse(JSON.stringify(params)); renumber();
   return entry;
 }
+
+/* ---------- questionnaire scores: knowledge / attitude / practice items into one score ---------- */
+const CORRECT_RE = /^(correct|right|true|accurate|yes,? correct|1)$/i, WRONG_RE = /^(wrong|incorrect|false|inaccurate|don'?t know|do not know|not sure|unsure|no idea|dk|0)$/i;
+const LIKERT_SCALES = [
+  ["strongly disagree", "disagree", "neutral|neither agree nor disagree|undecided|not sure", "agree", "strongly agree"],
+  ["never", "rarely|seldom", "sometimes|occasionally", "often|usually|frequently", "always"],
+  ["very poor", "poor", "fair|average", "good", "very good|excellent"],
+  ["very dissatisfied", "dissatisfied", "neutral", "satisfied", "very satisfied"],
+];
+function itemStem(v) {
+  const m = v.label.match(/^(.*?)[\s_\-:.]*(?:q|qn|question|item|no\.?|#)?\s*(\d{1,2})[a-z]?\s*[:.)-]?\s*(.*)$/i);
+  if (!m || !m[1] || m[1].length < 2) return null;
+  return m[1].replace(/[\s_\-:.]+$/, "").trim();
+}
+/** How one item scores: correct/wrong (1/0), yes/no (1/0), or a Likert position (1..5). */
+function itemScorer(v) {
+  const lv = (v.levels || v.allLevels || []).map(String), low = lv.map(x => x.toLowerCase().trim());
+  if (!lv.length) return null;
+  if (v.numeric) { const nums = lv.map(Number); if (nums.every(x => Number.isInteger(x) && x >= 0 && x <= 10)) return { kind: nums.every(x => x <= 1) ? "binary" : "scale", max: Math.max(...nums), min: Math.min(...nums), f: x => x === null ? null : Number(x) }; return null; }
+  if (low.some(x => CORRECT_RE.test(x)) && low.every(x => CORRECT_RE.test(x) || WRONG_RE.test(x))) return { kind: "correct", max: 1, min: 0, f: x => x === null ? null : CORRECT_RE.test(String(x).trim()) ? 1 : 0 };
+  if (low.every(x => /^(yes|no)$/.test(x))) return { kind: "yesno", max: 1, min: 0, f: x => x === null ? null : /^yes$/i.test(String(x).trim()) ? 1 : 0 };
+  for (const sc of LIKERT_SCALES) {
+    const pos = x => sc.findIndex(p => new RegExp("^(" + p + ")$").test(x));
+    if (low.every(x => pos(x) >= 0) && new Set(low.map(pos)).size >= 2) return { kind: "likert", max: 5, min: 1, f: x => x === null ? null : pos(String(x).toLowerCase().trim()) + 1 };
+  }
+  return null;
+}
+/** Groups of 2+ scorable items sharing a stem ("Knowledge Q1", "Knowledge Q2" …). */
+function itemGroups() {
+  if (!S.ds) return [];
+  const g = new Map();
+  S.ds.vars.forEach(v => {
+    if (v.type === "id" || /score|level|\(%\)/i.test(v.label)) return;
+    const st = itemStem(v), sc = st && itemScorer(v); if (!st || !sc) return;
+    const k = st.toLowerCase(); if (!g.has(k)) g.set(k, { stem: st, items: [] }); g.get(k).items.push({ v, sc });
+  });
+  return [...g.values()].filter(x => x.items.length >= 2 && (x.items.length >= 3 || /knowledge|attitude|practice|perception|belief|awareness|skill/i.test(x.stem)));
+}
+function levelWords(stem) {
+  return /attitude|perception|belief/i.test(stem) ? ["Positive", "Neutral", "Negative"] : /practice|behaviou?r|adherence/i.test(stem) ? ["Good", "Fair", "Poor"] : /knowledge|awareness|skill/i.test(stem) ? ["Good", "Moderate", "Poor"] : ["High", "Moderate", "Low"];
+}
+/** Add score columns for the matching groups (or all groups). Returns lines describing what was made. */
+function createScores(stemWanted) {
+  const groups = itemGroups().filter(gr => !stemWanted || gr.stem.toLowerCase().includes(stemWanted.toLowerCase()) || stemWanted.toLowerCase().includes(gr.stem.toLowerCase()));
+  if (!groups.length) throw Object.assign(new Error(itemGroups().length ? `I couldn't find a group of items called "${stemWanted}". Groups I can score: ${itemGroups().map(x => x.stem).join(", ")}.` : "I couldn't find a group of questionnaire items to score. Items need a shared name with numbers (for example Knowledge Q1, Knowledge Q2, Knowledge Q3) and answers such as Correct/Wrong, Yes/No or a Likert scale."), { user: true });
+  const lines = [], n = S.ds.nRows;
+  groups.forEach(gr => {
+    const [hi, mid, lo] = levelWords(gr.stem), maxTot = gr.items.reduce((a, it) => a + it.sc.max, 0);
+    const score = [], pct = [], level = [], good = [];
+    for (let i = 0; i < n; i++) {
+      const parts = gr.items.map(it => it.sc.f(it.v.values[i]));
+      if (parts.some(x => x === null || Number.isNaN(x))) { score.push(""); pct.push(""); level.push(""); good.push(""); continue; }
+      const tot = parts.reduce((a, b) => a + b, 0), p = 100 * tot / maxTot;
+      score.push(String(tot)); pct.push(p.toFixed(1)); level.push(p >= 80 ? hi : p >= 60 ? mid : lo); good.push(p >= 80 ? "Yes" : "No");
+    }
+    const base = gr.stem.replace(/\s+(questions?|items?)$/i, ""), add = [[`${base} score`, score], [`${base} score (%)`, pct], [`${base} level`, level], [`${hi} ${base.toLowerCase()} (80%+)`, good]];
+    add.forEach(([h, vals]) => {
+      let j = S.raw.headers.indexOf(h);
+      if (j < 0) { S.raw.headers.push(h); j = S.raw.headers.length - 1; S.raw.rows.forEach(r => { while (r.length < j) r.push(""); r.push(""); }); }
+      // raw rows map 1:1 onto dataset rows
+      S.raw.rows.forEach((r, i) => { r[j] = vals[i] === undefined ? "" : vals[i]; });
+    });
+    const kinds = [...new Set(gr.items.map(it => it.sc.kind))], miss = score.filter(x => x === "").length;
+    const how = kinds.includes("likert") ? "Likert answers scored 1 (most negative) to 5 (most positive)" : kinds.includes("correct") ? "1 point for each correct answer, 0 for wrong or don't know" : kinds.includes("yesno") ? "1 point for each Yes, 0 for No" : "item values added together";
+    lines.push(`**${base} score** from ${gr.items.length} items (${gr.items.map(it => it.v.label).slice(0, 4).join(", ")}${gr.items.length > 4 ? " …" : ""}): ${how}, out of ${maxTot}. Also **${base} score (%)**, **${base} level** (Bloom's cut-off: 80% and above ${hi.toLowerCase()}, 60–79% ${mid.toLowerCase()}, below 60% ${lo.toLowerCase()}) and a Yes/No column **${hi} ${base.toLowerCase()} (80%+)** for regression.${miss ? ` ${miss} row${miss > 1 ? "s have" : " has"} a missing item, so no score.` : ""}${kinds.includes("yesno") ? " Check that Yes is the correct or desired answer for every item; reverse any that aren't before scoring." : ""}${kinds.includes("likert") ? " If any statement is worded negatively, reverse it first." : ""}`);
+  });
+  rebuild(); rerunLog();
+  return lines;
+}
+
+/** Sensible predictors for an outcome: drops IDs, dates, free text, the outcome's own derived columns,
+    questionnaire items that have been turned into a score, and variables with many categories or gaps. */
+function candidatePredictors(outName, max) {
+  const scored = new Set(), groups = itemGroups();
+  groups.forEach(gr => { const base = gr.stem.replace(/\s+(questions?|items?)$/i, "").toLowerCase(); if (varsUsable().some(v => v.label.toLowerCase() === base + " score")) gr.items.forEach(it => scored.add(it.v.name)); });
+  const out = V(outName), outBase = out ? out.label.toLowerCase().replace(/\s*(score|level|\(%\)|\(80%\+\))\s*/g, " ").trim() : "";
+  return varsUsable().filter(v => v.name !== outName && ["binary", "categorical", "continuous", "count", "ordinal"].includes(v.type)
+      && !scored.has(v.name) && !/time|date|comment|remark|_id$/i.test(v.name)
+      && !/\(%\)|\(80%\+\)|\blevel$/i.test(v.label)                       // keep the plain score, not its % / level / yes-no copies
+      && !(outBase && v.label.toLowerCase().includes(outBase.split(" ")[0]) && /score|level|%/i.test(v.label))
+      && (v.nMissing || 0) < S.ds.nRows * 0.3 && !(v.levels && v.levels.length > 8))
+    .slice(0, max || 7).map(v => v.name);
+}
 /** Run an action through the deterministic engine. Returns {entry} | {forecast:true} | {nav} ; throws user errors. */
 function runAction(a) {
   const need = (nm, label, types) => { const v = resolveVar(nm, types); if (!v) throw Object.assign(new Error(`I couldn't find a suitable variable for ${label} ("${nm || "none given"}"). Variables: ${varsUsable().map(x => x.name).join(", ")}.`), { user: true }); return v.name; };
   const many = (arr, label) => (Array.isArray(arr) ? arr : []).map(x => need(x, label));
   if (a.type === "describe") { const vars = many(a.vars && a.vars.length ? a.vars : varsUsable().map(v => v.name).slice(0, 8), "the table"); const group = a.group ? need(a.group, "the grouping variable", ["binary", "categorical"]) : ""; return { entry: addEntry("describe", { vars: vars.filter(v => v !== group), group }, runAnalysis("describe", { vars: vars.filter(v => v !== group), group })) }; }
   if (a.type === "compare") { const p = { outcome: need(a.outcome, "the outcome"), exposure: need(a.exposure, "the exposure"), paired: !!a.paired, force: "" }; return { entry: addEntry("compare", p, runAnalysis("compare", p)) }; }
-  if (a.type === "regression") { const p = { outcome: need(a.outcome, "the outcome"), preds: many(a.predictors, "the predictors"), model: ["auto", "linear", "logistic", "modpoisson", "poisson", "ordinal", "multinomial", "mixed"].includes(a.model) ? a.model : "auto", cluster: a.cluster ? need(a.cluster, "the cluster variable") : "" }; return { entry: addEntry("regression", p, runAnalysis("regression", p)) }; }
+  if (a.type === "regression") { if (a.predictors === "auto") a = Object.assign({}, a, { predictors: candidatePredictors(need(a.outcome, "the outcome")) }); const p = { outcome: need(a.outcome, "the outcome"), preds: many(a.predictors, "the predictors"), model: ["auto", "linear", "logistic", "modpoisson", "poisson", "ordinal", "multinomial", "mixed"].includes(a.model) ? a.model : "auto", cluster: a.cluster ? need(a.cluster, "the cluster variable") : "" }; return { entry: addEntry("regression", p, runAnalysis("regression", p)) }; }
   if (a.type === "survival") { const p = { time: need(a.time, "follow-up time", ["continuous", "count"]), event: need(a.event, "the event", ["binary"]), group: a.group ? need(a.group, "the group", ["binary", "categorical"]) : "", covs: many(a.covariates, "the covariates") }; return { entry: addEntry("survival", p, runAnalysis("survival", p)) }; }
   if (a.type === "forecast") {
     const value = need(a.value, "the value to forecast", ["continuous", "count"]), dv = a.date ? resolveVar(a.date) : null;
@@ -3940,6 +4023,7 @@ function runAction(a) {
     runForecast(); if (S.fc.err) throw Object.assign(new Error(S.fc.err), { user: true }); return { forecast: true };
   }
   if (a.type === "check") return { check: true };
+  if (a.type === "score") return { scored: createScores(a.stem || "") };
   if (a.type === "fix") { const d = applyAllFixes(); return { check: true, fixed: d }; }
   if (a.type === "report") { if (!S.log.length) throw Object.assign(new Error("There are no analyses to report yet. Ask me to run one first."), { user: true }); saveFile("quantai-report.html", reportHTML()); return { report: true }; }
   if (a.type === "open") { const t = a.tool; if (METHOD_TOOLS.some(x => x.id === t)) return { nav: ["method", t] }; if (DATA_TOOLS.some(x => x.id === t)) return { nav: ["data", t] }; throw Object.assign(new Error(`There is no "${t}" tool.`), { user: true }); }
@@ -4029,13 +4113,14 @@ function kbAnswer(text) {
 
 const DIRECT_REPLY = {
   compare: a => `Comparing **${vlabel(V(a.outcome) || { name: a.outcome })}** by **${vlabel(V(a.exposure) || { name: a.exposure })}**. QuantAI checked the assumptions and chose the test for you. The rules it applied are listed below the result.`,
-  regression: a => `Looking at what is associated with **${vlabel(V(a.outcome) || { name: a.outcome })}**, adjusting for ${a.predictors.length} variables at once${a.model === "modpoisson" ? ", reported as prevalence ratios" : a.model === "logistic" ? ", reported as odds ratios" : ""}. Change the variables in the full result if you want a different model.`,
+  regression: a => `Looking at what is associated with **${vlabel(V(a.outcome) || { name: a.outcome })}**, adjusting for ${Array.isArray(a.predictors) ? a.predictors.length : "the main"} variables at once${a.model === "modpoisson" ? ", reported as prevalence ratios" : a.model === "logistic" ? ", reported as odds ratios" : ""}. Change the variables in the full result if you want a different model.`,
   survival: a => `Survival analysis of **${vlabel(V(a.event) || { name: a.event })}** over **${vlabel(V(a.time) || { name: a.time })}**${a.group ? ` by **${vlabel(V(a.group) || { name: a.group })}**` : ""}: Kaplan–Meier, log-rank test and Cox regression.`,
   forecast: a => `Forecasting **${vlabel(V(a.value) || { name: a.value })}** for the next ${a.horizon} periods.`,
   describe: a => `Here is a summary table of your variables${a.group ? ` by **${vlabel(V(a.group) || { name: a.group })}**` : ""}.`,
   open: a => ({ design: "The study design advisor can help with that: answer a few questions and it recommends a design, with the reasons.", sample: "The sample size calculator works that out for you, with adjustments for non-response.", test: "The test selector can choose that: tell it your outcome and comparison, and it picks the test and gives you the code.", question: "The research question builder turns your topic into a clear question, objectives and hypotheses.", checklist: "The reporting checklists cover STROBE, CONSORT, STARD, COREQ and PRISMA." })[a.tool] || "This tool can help with that.",
   check: () => "Here is QuantAI's check of your data.",
   fix: () => "Applying the suggested fixes.",
+  score: () => "Creating the scores from your questionnaire items:",
   report: () => "Preparing your report.",
 };
 function OFFLINE_HELP() {
@@ -4071,8 +4156,7 @@ function localIntent(text) {
     const out = resolveVar(clean(rm[1]));
     if (out) {
       const f = S.form.regression || {};
-      let preds = f.outcome === out.name && f.preds && f.preds.length ? f.preds.slice()
-        : varsUsable().filter(v => v.name !== out.name && ["binary", "categorical", "continuous", "count", "ordinal"].includes(v.type) && !/id$|_id|time|month|follow|date/i.test(v.name) && (v.nMissing || 0) < S.ds.nRows * 0.3).slice(0, 6).map(v => v.name);
+      let preds = f.outcome === out.name && f.preds && f.preds.length ? f.preds.slice() : candidatePredictors(out.name, 6).filter(n => !/month|follow/i.test(n));
       if (preds.length) return { type: "regression", outcome: out.name, predictors: preds, model: preferPR ? "modpoisson" : preferOR ? "logistic" : (f.outcome === out.name && f.model) || "auto" };
     }
   }
@@ -4080,14 +4164,22 @@ function localIntent(text) {
   if (/\b(check|clean|problems?|issues?|quality)\b.*\b(data|file|dataset)\b|\b(data|file)\b.*\b(check|clean|problems?|issues?)\b/i.test(text)) return { type: "check" };
   if (/^\s*(fix|apply)\b.*\b(them|all|fixes|problems?|data|it)\b/i.test(text)) return { type: "fix" };
   if (/\b(download|export|make|create|give)\b.*\breport\b/i.test(text)) return { type: "report" };
-  if (/\b(describe|summari[sz]e|table ?1|overview|summary)\b/i.test(text)) { const g = text.match(/\bby\s+(.+?)[?.!]*$/i), gv = g ? resolveVar(clean(g[1]), ["binary", "categorical"]) : null; return { type: "describe", vars: [], group: gv ? gv.name : "" }; }
+  if (/\b(describe|summari[sz]e|table ?1|overview|summary)\b/i.test(text)) {
+    const g = text.match(/\bby\s+(.+?)[?.!]*$/i), gv = g ? resolveVar(clean(g[1]), ["binary", "categorical"]) : null;
+    const listTxt = text.replace(/\bby\s+.+$/i, "").replace(/^.*?\b(describe|summari[sz]e|table ?1 (of|for)|overview of|summary of)\b/i, "").replace(/\b(my|the)\s+(data|dataset|variables?|sample)\b/ig, "").trim();
+    const vars = listTxt ? listTxt.split(/\s*(?:,|\band\b|&)\s*/).map(x => resolveVar(clean(x))).filter(Boolean).map(v => v.name) : [];
+    return { type: "describe", vars: [...new Set(vars)], group: gv ? gv.name : "" };
+  }
+  // questionnaire scores
+  if (/\b(score|scores|scoring|index|composite)\b/i.test(t) && /\b(create|make|compute|calculate|generate|build|get|add|score|sum|total)\b/i.test(t) && itemGroups().length) {
+    const want = itemGroups().find(gr => low.includes(gr.stem.toLowerCase()) || low.includes(gr.stem.toLowerCase().split(" ")[0]));
+    return { type: "score", stem: want ? want.stem : "" };
+  }
   // whole-dataset requests: check, Table 1, then the main outcome's associated factors
   if (/\b(analy[sz]e|analysis of|run (an )?analysis on|work on|look (at|into)|go through|examine|explore)\b.*\b(my|the|this|whole|entire|all)?\s*(data|dataset|file|survey|everything)\b|\bfull analysis\b|\banaly[sz]e (it|everything)\b/i.test(t)) {
     const g = mainGroup(), o = mainOutcome(), acts = [{ type: "check" }, { type: "describe", vars: [], group: (o || g) ? (o || g).name : "" }];
-    if (o) {
-      const preds = varsUsable().filter(v => v.name !== o.name && ["binary", "categorical", "continuous", "count", "ordinal"].includes(v.type) && !/time|date|comment|remark|_id$/i.test(v.name) && (v.nMissing || 0) < S.ds.nRows * 0.3 && !(v.levels && v.levels.length > 8)).slice(0, 7).map(v => v.name);
-      if (preds.length) acts.push({ type: "regression", outcome: o.name, predictors: preds, model: "auto" });
-    }
+    if (itemGroups().length) acts.unshift({ type: "score", stem: "" });
+    if (o) acts.push({ type: "regression", outcome: o.name, predictors: "auto", model: "auto" });
     return acts;
   }
   // "is X associated / related / linked with Y", "relationship between X and Y", "does X affect Y"
@@ -4130,7 +4222,7 @@ async function sendChatMessage(text) {
   const deeper = /^in more depth:\s*/i.test(text);
   const kbFirst = !deeper && KB_TRIGGER.test(text) ? kbAnswer(text) : null;
   const direct = kbFirst || deeper ? null : localIntent(text);
-  if (Array.isArray(direct)) { reply = "Here is a full first pass: a check of the file, a summary table, and the factors associated with the main outcome. Ask me to compare anything else, or tap \"Open full result and code\" on any result."; action = direct; }
+  if (Array.isArray(direct)) { reply = "Here is a full first pass" + (direct.some(a => a.type === "score") ? ": scores made from your questionnaire items, " : ": ") + "a check of the file, a summary table, and the factors associated with the main outcome. Ask me to compare anything else, or tap \"Open full result and code\" on any result."; action = direct; }
   else if (kbFirst) {
     reply = kbFirst.a; action = null;
     helpExtra = { suggest: kbRelated(kbFirst).concat(["In more depth: " + text]), tools: kbFirst.tool ? [kbFirst.tool] : [] };
@@ -4157,6 +4249,7 @@ async function sendChatMessage(text) {
       if (r.entry) (msg.refs = msg.refs || []).push(r.entry.id);
       if (r.forecast) msg.forecast = true;
       if (r.check) msg.check = true;
+      if (r.scored) msg.content += "\n\n" + r.scored.map(x => "- " + x).join("\n");
       if (r.fixed) msg.content += r.fixed.length ? "\n\n" + r.fixed.map(x => "- " + x).join("\n") : "\n\nThere was nothing that needed an automatic fix.";
       if (r.report) msg.content += "\n\nThe report (every analysis with its tables, rules and write-up) has been downloaded as **quantai-report.html**. Open it in a browser and print to PDF, or copy the tables into Word.";
       if (r.nav) { const list = r.nav[0] === "method" ? METHOD_TOOLS : DATA_TOOLS, t = list.find(x => x.id === r.nav[1]); msg.tools = [[r.nav[0], r.nav[1], t ? "Open " + t.label.toLowerCase() : "Open tool"]]; }
@@ -4179,7 +4272,7 @@ function chatResultCard(m) {
       <div class="row"><button class="btn quiet sm" data-act="chat-open" data-sec="data" data-tool="forecast">Open the full forecast</button></div></div>`;
   }
   const en = m.ref && S.log.find(x => x.id === m.ref);
-  if (!en) return m.action && !m.failed && (Array.isArray(m.action) || !["open", "report", "check", "fix"].includes(m.action.type)) ? `<div class="notice info" style="font-size:.84rem">${esc(Array.isArray(m.action) ? m.action.length + " analyses" : ACTION_LABEL[m.action.type] || "Analysis")} from an earlier visit. Results aren't stored, so the data must be loaded again. <button class="btn quiet sm" data-act="chat-rerun" data-i="${esc(JSON.stringify(m.action))}">Run it again</button></div>` : "";
+  if (!en) return m.action && !m.failed && (Array.isArray(m.action) || !["open", "report", "check", "fix", "score"].includes(m.action.type)) ? `<div class="notice info" style="font-size:.84rem">${esc(Array.isArray(m.action) ? m.action.length + " analyses" : ACTION_LABEL[m.action.type] || "Analysis")} from an earlier visit. Results aren't stored, so the data must be loaded again. <button class="btn quiet sm" data-act="chat-rerun" data-i="${esc(JSON.stringify(m.action))}">Run it again</button></div>` : "";
   const r = en.result, main = r.tables.find(t => /coefficient|ratio|Fixed|Hazard|t-test|ANOVA|Kruskal|Mann|chi|Fisher|correlation|McNemar|Wilcoxon|Table 1/i.test(t.title)) || r.tables[0];
   const ex = S.explain[en.id] || {};
   return `<div class="qa-result">
@@ -4219,11 +4312,12 @@ document.addEventListener("change", async e => {
   render();
 });
 
-const OUTCOME_RE = /hypertens|diabet|disease|status|outcome|positive|diagnos|infect|malaria|death|died|pass|default|anaemi|anemi|stunt|wasting|underweight|obes|overweight|complication|adheren|compliance|uptake|utili[sz]|satisf|depress|anxiety|stress|delivery|vaccin|immuni[sz]|test(ed)?|screen|use of|using|practice|knowledge|awareness/i;
+const OUTCOME_RE = /hypertens|diabet|disease|status|outcome|positive|diagnos|infect|malaria|death|died|pass|default|anaemi|anemi|stunt|wasting|underweight|obes|overweight|complication|adheren|compliance|uptake|utili[sz]|satisf|depress|anxiety|stress|delivery|vaccin|immuni[sz]|test(ed)?|screen|use of|using|\buses?\b|practice|knowledge|awareness/i;
 const DEMO_RE = /\b(sex|gender|male|female|age|marital|religion|ethnic|tribe|occupation|region|district|residence|education|income|household|name|phone|date|comment|remark|interviewer)\b|_id$|\bid\b|s\/n/i;
 /** The variable a study is most likely about: a yes/no question such as "Do you have hypertension?". */
 function mainOutcome() {
-  const vs = varsUsable(), bins = vs.filter(v => v.type === "binary");
+  const items = new Set(itemGroups().flatMap(gr => gr.items.map(it => it.v.name)));
+  const vs = varsUsable(), bins = vs.filter(v => v.type === "binary" && !items.has(v.name) && !/\(80%\+\)|score|level/i.test(v.label));
   const txt = v => v.name + " " + v.label;
   return bins.find(v => /^(do|did|have|has|are|is|were|was)\b/i.test(v.label) && OUTCOME_RE.test(txt(v)) && !DEMO_RE.test(txt(v)))
     || bins.find(v => OUTCOME_RE.test(txt(v)) && !DEMO_RE.test(txt(v)) && !/knowledge|q\d/i.test(txt(v)))
@@ -4245,6 +4339,7 @@ function dataSuggestions(fixable) {
   const outc = mainOutcome();
   const out = [];
   if (fixable) out.push("Fix them");
+  itemGroups().slice(0, 3).forEach(gr => { const w = gr.stem.toLowerCase().replace(/\s+(questions?|items?)$/, ""); out.push(`Create ${/^[aeiou]/.test(w) ? "an" : "a"} ${w} score`); });
   out.push("Analyse my data");
   out.push("Describe my data" + (grp ? " by " + vlabel(grp) : ""));
   if (outc) out.push(`What factors are associated with ${vlabel(outc)}`);
@@ -4252,7 +4347,7 @@ function dataSuggestions(fixable) {
   if (outc && grp && outc !== grp) out.push(`Is ${vlabel(outc).replace(/^(do you have|have you|are you)\s+/i, "").replace(/\?$/, "")} associated with ${vlabel(grp)}?`);
   else if (num && grp) out.push(`Compare ${vlabel(num)} by ${vlabel(grp)}`);
   if (isTimeSeries() && num) out.push(`Forecast ${vlabel(num)}`);
-  return out.slice(0, 5);
+  return out.slice(0, 6);
 }
 /** After an upload: say what was read, what was fixed automatically, and what needs a decision. */
 function pushUploadMessage(fname) {
