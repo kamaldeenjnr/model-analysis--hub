@@ -3908,7 +3908,8 @@ function runAction(a) {
   throw Object.assign(new Error("I don't know how to run that yet."), { user: true });
 }
 /* ---------- built-in answers to basic research questions (work without the AI) ---------- */
-const RESEARCH_KB = [
+const KB_GROUP = { "p-value": "stats", "Confidence interval": "stats", "Statistical significance": "stats", "Null and alternative hypotheses": "stats", "Type I and Type II errors": "stats", "Statistical power": "stats", "Sample size": "design", "Confounding": "epi", "Bias": "epi", "Dependent and independent variables": "measure", "Types of variables": "measure", "Mean, median and spread": "stats", "Normal distribution": "stats", "t-test": "stats", "Chi-square test": "stats", "ANOVA": "stats", "Non-parametric tests": "stats", "Correlation": "stats", "Linear regression": "regression", "Logistic regression and odds ratios": "regression", "Prevalence and incidence": "epi", "Prevalence and risk ratios": "epi", "Cross-sectional study": "design", "Cohort study": "design", "Case-control study": "design", "Randomised controlled trial": "design", "Choosing a study design": "design", "Qualitative vs quantitative research": "qual", "Sampling methods": "design", "Validity and reliability": "measure", "Research questions and objectives": "thesis", "Literature and systematic reviews": "review", "Research ethics": "ethics", "Survival analysis": "regression", "Paired vs independent data": "stats", "Pilot study": "measure", "Designing a questionnaire": "measure" };
+const RESEARCH_KB = (window.QA_KB_EXTRA || []).concat([
   { k: ["p-value", "p value", "pvalue"], t: "p-value", a: "A **p-value** is the probability of getting a result at least as extreme as yours if there were really no effect (if the null hypothesis were true). A small p-value (usually below 0.05) means your result would be unusual if there were no effect, so you reject the null hypothesis.\n\nIt does **not** tell you how big or important the effect is, and it is not the probability that your hypothesis is true. Always report it with the effect size and its 95% confidence interval." },
   { k: ["confidence interval", "95% ci", "95 ci"], t: "Confidence interval", a: "A **95% confidence interval** is the range of values that is compatible with your data for the true effect. If you repeated the study many times, 95% of the intervals calculated this way would contain the true value.\n\nA narrow interval means a precise estimate. For a difference, if the interval includes 0 the result is not significant; for a ratio (odds ratio, risk ratio), if it includes 1 it is not significant." },
   { k: ["statistical significance", "statistically significant", "significance level", "alpha level"], t: "Statistical significance", a: "A result is **statistically significant** when its p-value is below a level chosen before the analysis, usually **0.05** (the significance level, alpha). It means the result is unlikely to be due to chance alone.\n\nSignificant does not mean important: with a large sample, tiny differences become significant. Judge importance from the size of the effect and its confidence interval." },
@@ -3946,22 +3947,46 @@ const RESEARCH_KB = [
   { k: ["paired", "independent samples", "related samples", "repeated measures", "before and after"], t: "Paired vs independent data", a: "Data are **independent** when each group contains different people (men vs women). They are **paired (related)** when the same people are measured twice (before and after training) or are matched.\n\nPaired data need paired tests: paired t-test, Wilcoxon signed-rank, or McNemar's test for binary outcomes. Using an independent test on paired data is a common mistake." },
   { k: ["pilot study", "pre-test", "pretest", "pre-testing"], t: "Pilot study", a: "A **pilot study** (or pre-test) is a small trial run before the main study, often with 10–30 people similar to your target group. It checks whether questions are understood, how long data collection takes, and whether recruitment works.\n\nPilot participants are normally **not** included in the main analysis." },
   { k: ["questionnaire", "likert", "survey questions", "data collection tool"], t: "Designing a questionnaire", a: "A good **questionnaire** uses short, clear, neutral questions, one idea per question, in a logical order. Use **closed questions** (yes/no, multiple choice, **Likert scales** such as strongly disagree to strongly agree) for analysis, and a few open questions for detail.\n\nAvoid leading or double-barrelled questions, translate and back-translate if needed (e.g. into Twi or Ewe), and **pilot** it before use." },
-];
-const KB_TRIGGER = /\b(what (is|are|does|do)|what's|whats|define|definition|meaning of|meaning|mean by|explain|difference between|differences between|how (do|does|to|should|can) (i |we |you )?(choose|use|interpret|calculate|report|write|conduct|do|know)|when (should|do|to) (i |we )?use|why (do|is|are)|types of|tell me about|examples? of)\b/i;
+]).map(e => Object.assign({ c: KB_GROUP[e.t] }, e, { k: e.k.concat([e.t.toLowerCase().replace(/\s*\(.*?\)/g, "")]) }));
+const KB_TRIGGER = /\b(how (to|do i|should i|can i|do you) (write|structure|calculate|choose|interpret|report|analy[sz]e|cite|present|test|check|handle|use|do|get|find|search|select|deal)|steps? (to|for|in)|structure of|format of|tips? (for|on)|what should|chapter|what (is|are|does|do)|what's|whats|define|definition|meaning of|meaning|mean by|explain|difference between|differences between|how (do|does|to|should|can) (i |we |you )?(choose|use|interpret|calculate|report|write|conduct|do|know)|when (should|do|to) (i |we )?use|why (do|is|are)|types of|tell me about|examples? of)\b/i;
+/** Up to three other handbook topics from the same group, as follow-up questions. */
+function kbRelated(entry) {
+  if (!entry.c) return [];
+  const same = RESEARCH_KB.filter(e => e.c === entry.c && e.t !== entry.t);
+  const start = same.length ? (entry.t.length * 7) % same.length : 0;
+  return same.slice(start).concat(same.slice(0, start)).slice(0, 3).map(e => "Explain " + e.t.replace(/\s*\(.*?\)/g, "").toLowerCase());
+}
+function kbHits(low) {
+  const hits = [];
+  RESEARCH_KB.forEach(e => {
+    let best = 0, pos = 1e9;
+    e.k.forEach(k => {
+      const at = low.indexOf(" " + k + " ") >= 0 ? low.indexOf(" " + k + " ") : low.indexOf(" " + k + "s ") >= 0 ? low.indexOf(" " + k + "s ") : (k.length > 6 ? low.indexOf(k) : -1);
+      if (at < 0) return;
+      // longer, more specific phrases score higher; topics named earlier in the question win ties
+      const sc = k.length - at * 0.1;
+      if (sc > best) { best = sc; pos = at; }
+    });
+    if (best > 0) hits.push({ e, sc: best, pos });
+  });
+  return hits.sort((x, y) => y.sc - x.sc);
+}
 function kbAnswer(text) {
-  const low = " " + text.toLowerCase().replace(/[?!.,]/g, " ") + " ";
+  const low = " " + text.toLowerCase().replace(/[?!.,]/g, " ").replace(/\s+/g, " ") + " ";
   const asked = KB_TRIGGER.test(text) || text.trim().split(/\s+/).length <= 4;
   if (!asked) return null;
-  const hits = [];
-  RESEARCH_KB.forEach(e => { let len = 0; e.k.forEach(k => { if (low.includes(" " + k + " ") || low.includes(" " + k + "s ") || (k.length > 6 && low.includes(k))) len = Math.max(len, k.length); }); if (len) hits.push({ e, len, pos: Math.min(...e.k.map(k => low.indexOf(k)).filter(i => i >= 0)) }); });
-  if (!hits.length) return null;
-  hits.sort((x, y) => y.len - x.len);
-  // "difference between A and B", "A vs B": answer both, in the order asked
-  if (hits.length > 1 && /\b(difference|differences|differ|compare|comparison|versus|vs)\b/i.test(text)) {
-    const two = hits.slice(0, 2).sort((x, y) => x.pos - y.pos).map(h => h.e);
-    return { t: two.map(e => e.t).join(" vs "), a: two.map(e => `**${e.t}**\n\n${e.a}`).join("\n\n"), tool: two[0].tool || two[1].tool };
+  // "difference between A and B" / "A vs B": look up each side on its own
+  const cmp = low.match(/(?:difference|differences|compare|comparison|distinguish)\s+(?:between\s+)?(.+?)\s+(?:and|vs|versus|with)\s+(.+?)\s*$/) || low.match(/^\s*(?:what is\s+)?(.+?)\s+(?:vs|versus)\s+(.+?)\s*$/);
+  if (cmp) {
+    let a = cmp[1].replace(/^(a|an|the)\s+/, "").trim(), b = cmp[2].replace(/^(a|an|the)\s+/, "").trim();
+    const tail = b.split(" ").slice(1).join(" ");
+    if (a.split(" ").length === 1 && tail) a = a + " " + tail;   // "stratified and cluster sampling" -> "stratified sampling"
+    const ha = kbHits(" " + a + " ")[0], hb = kbHits(" " + b + " ")[0];
+    if (ha && hb && ha.e !== hb.e) return { t: ha.e.t + " vs " + hb.e.t, a: `**${ha.e.t}**\n\n${ha.e.a}\n\n**${hb.e.t}**\n\n${hb.e.a}`, tool: ha.e.tool || hb.e.tool, c: ha.e.c };
+    if (ha && hb) return ha.e;
   }
-  return hits[0].e;
+  const hits = kbHits(low);
+  return hits.length ? hits[0].e : null;
 }
 
 const DIRECT_REPLY = {
@@ -4042,8 +4067,13 @@ async function sendChatMessage(text) {
   if (c.title === "New chat") c.title = text.slice(0, 60);
   S.chatBusy = true; saveChats(); render();
   let reply, action, note = null, helpExtra = null;
-  const direct = KB_TRIGGER.test(text) && kbAnswer(text) ? null : localIntent(text);
-  if (direct) {
+  const deeper = /^in more depth:\s*/i.test(text);
+  const kbFirst = !deeper && KB_TRIGGER.test(text) ? kbAnswer(text) : null;
+  const direct = kbFirst || deeper ? null : localIntent(text);
+  if (kbFirst) {
+    reply = kbFirst.a; action = null;
+    helpExtra = { suggest: kbRelated(kbFirst).concat(["In more depth: " + text]), tools: kbFirst.tool ? [kbFirst.tool] : [] };
+  } else if (direct) {
     reply = DIRECT_REPLY[direct.type] ? DIRECT_REPLY[direct.type](direct) : "Done.";
     action = direct;
   } else try {
@@ -4234,7 +4264,7 @@ function renderChatMain() {
     <div class="chat-dock">${composerHTML(false)}<p class="disclaimer">QuantAI's engine computes every number. Explanations come from an AI assistant and can be wrong, so check anything important.</p></div>`;
 }
 function msgChips(m) {
-  const sug = (m.suggest || []).map(t => `<button type="button" class="chip" data-act="chat-starter" data-text="${esc(t)}">${esc(t)}</button>`).join("");
+  const sug = (m.suggest || []).map(t => /^in more depth:/i.test(t) ? `<button type="button" class="chip tool" data-act="chat-starter" data-text="${esc(t)}">Go deeper with AI →</button>` : `<button type="button" class="chip" data-act="chat-starter" data-text="${esc(t)}">${esc(t)}</button>`).join("");
   const tools = (m.tools || []).map(([sec, id, label]) => `<button type="button" class="chip tool" data-act="chat-open" data-sec="${esc(sec)}" data-tool="${esc(id)}">${esc(label)} →</button>`).join("");
   return sug || tools ? `<div class="chips">${sug}${tools}</div>` : "";
 }
