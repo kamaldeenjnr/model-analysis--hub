@@ -3848,7 +3848,7 @@ const CHAT_KEY = "chats";
 S.chats = (() => { const c = store.get(CHAT_KEY, []); return Array.isArray(c) ? c.slice(0, 30) : []; })();
 S.chatId = S.chats.length ? S.chats[0].id : null;
 S.chatBusy = false;
-const saveChats = () => store.set(CHAT_KEY, S.chats.slice(0, 30).map(c => ({ ...c, messages: c.messages.slice(-60).map(m => ({ role: m.role, content: m.content, action: m.action || null, note: m.note || null })) })));
+const saveChats = () => store.set(CHAT_KEY, S.chats.slice(0, 30).map(c => ({ ...c, messages: c.messages.slice(-60).map(m => ({ role: m.role, content: m.content, action: m.action || null, note: m.note || null, suggest: m.suggest || null, tools: m.tools || null })) })));
 const curChat = () => S.chats.find(c => c.id === S.chatId) || null;
 function newChat() { const c = { id: "c" + Date.now().toString(36), title: "New chat", created: Date.now(), messages: [] }; S.chats.unshift(c); S.chatId = c.id; saveChats(); return c; }
 
@@ -3921,7 +3921,7 @@ const DIRECT_REPLY = {
 function OFFLINE_HELP() {
   const vs = varsUsable(), demo = /\b(sex|gender|male|female|age)\b|_id$|\bid\b/i, nums = vs.filter(v => v.type === "continuous" && !demo.test(v.name + " " + v.label)), num = nums[0] || vs.find(v => v.type === "continuous"), cat = vs.find(v => ["binary", "categorical"].includes(v.type) && /\b(sex|gender)\b/i.test(v.name + " " + v.label)) || vs.find(v => ["binary", "categorical"].includes(v.type)), bins = vs.filter(v => v.type === "binary" && !demo.test(v.name + " " + v.label) && v !== cat), bin = bins.find(v => /hypertens|diabet|disease|status|outcome|positive|diagnos|infect|malaria|death|died|pass|default|anaemi|stunt/i.test(v.name + " " + v.label)) || bins[0];
   const ex = [num && cat ? `compare ${vlabel(num)} by ${vlabel(cat)}` : null, bin ? `risk factors for ${vlabel(bin)}` : null, "describe my data", "check my data for problems"].filter(Boolean);
-  return `I couldn't work that one out on my own, and the AI assistant isn't answering right now. I can always do requests like these:\n\n${ex.map(x => "- " + x).join("\n")}\n\nYou can also open any tool from **Analyse data** or **Plan a study** on the left.`;
+  return { text: "I couldn't work that one out on my own, and the AI assistant isn't answering right now. Here's what I can do straight away: tap one, or attach your own data with the clip.", suggest: ex, tools: [["method", "question", "Plan a study: research question"], ["method", "design", "Choose a study design"], ["method", "sample", "Work out a sample size"]] };
 }
 /** Offline fallback for the most common request when the assistant can't be reached. */
 function localIntent(text) {
@@ -3984,7 +3984,7 @@ async function sendChatMessage(text) {
   c.messages.push({ role: "user", content: text });
   if (c.title === "New chat") c.title = text.slice(0, 60);
   S.chatBusy = true; saveChats(); render();
-  let reply, action, note = null;
+  let reply, action, note = null, helpExtra = null;
   const direct = localIntent(text);
   if (direct) {
     reply = DIRECT_REPLY[direct.type] ? DIRECT_REPLY[direct.type](direct) : "Done.";
@@ -3995,9 +3995,10 @@ async function sendChatMessage(text) {
   } catch (e) {
     const local = localIntent(text);
     if (local) { reply = "I ran this directly with QuantAI's rules."; action = local; }
-    else { reply = OFFLINE_HELP(); action = null; note = "help"; }
+    else { const h = OFFLINE_HELP(); reply = h.text; action = null; note = "help"; helpExtra = h; }
   }
   const msg = { role: "assistant", content: reply, action: action || null, note };
+  if (helpExtra) { msg.suggest = helpExtra.suggest; msg.tools = helpExtra.tools; }
   const acts = Array.isArray(action) ? action.filter(a => a && typeof a === "object").slice(0, 4) : action ? [action] : [];
   if (acts.length) msg.action = acts.length === 1 ? acts[0] : acts;
   const errs = [];
@@ -4009,13 +4010,12 @@ async function sendChatMessage(text) {
       if (r.check) msg.check = true;
       if (r.fixed) msg.content += r.fixed.length ? "\n\n" + r.fixed.map(x => "- " + x).join("\n") : "\n\nThere was nothing that needed an automatic fix.";
       if (r.report) msg.content += "\n\nThe report (every analysis with its tables, rules and write-up) has been downloaded as **quantai-report.html**. Open it in a browser and print to PDF, or copy the tables into Word.";
-      if (r.nav) msg.nav = r.nav;
+      if (r.nav) { const list = r.nav[0] === "method" ? METHOD_TOOLS : DATA_TOOLS, t = list.find(x => x.id === r.nav[1]); msg.tools = [[r.nav[0], r.nav[1], t ? "Open " + t.label.toLowerCase() : "Open tool"]]; }
     } catch (err) { errs.push(err.user ? err.message : "The analysis failed: " + err.message); }
   });
   if (msg.refs) msg.ref = msg.refs[0];
   if (errs.length) { msg.content = (msg.content ? msg.content + "\n\n" : "") + errs.join("\n\n"); msg.note = msg.refs || msg.check ? null : "error"; msg.failed = !msg.refs && !msg.check && !msg.forecast; }
   c.messages.push(msg); S.chatBusy = false; saveChats();
-  if (msg.nav) { S.section = msg.nav[0]; S.tool[msg.nav[0]] = msg.nav[1]; }
   render();
 }
 
@@ -4070,6 +4070,21 @@ document.addEventListener("change", async e => {
   render();
 });
 
+/** Questions that make sense for the loaded file. */
+function dataSuggestions(fixable) {
+  const vs = varsUsable(), demo = /\b(sex|gender|male|female|age)\b|_id$|\bid\b/i;
+  const num = vs.filter(v => v.type === "continuous" && !demo.test(v.name + " " + v.label))[0] || vs.find(v => v.type === "continuous");
+  const grp = vs.find(v => ["binary", "categorical"].includes(v.type) && /\b(sex|gender)\b/i.test(v.name + " " + v.label)) || vs.find(v => ["binary", "categorical"].includes(v.type));
+  const bins = vs.filter(v => v.type === "binary" && v !== grp && !demo.test(v.name + " " + v.label));
+  const out = [];
+  if (fixable) out.push("Fix them");
+  out.push("Describe my data" + (grp ? " by " + vlabel(grp) : ""));
+  if (num && grp) out.push(`Compare ${vlabel(num)} by ${vlabel(grp)}`);
+  if (bins.length) out.push(`What factors are associated with ${vlabel(bins[0])}?`);
+  else if (num) out.push(`What affects ${vlabel(num)}?`);
+  if (fcDateVars().length && num) out.push(`Forecast ${vlabel(num)}`);
+  return out.slice(0, 5);
+}
 /** After an upload: say what was read, what was fixed automatically, and what needs a decision. */
 function pushUploadMessage(fname) {
   const c = curChat() || newChat();
@@ -4080,8 +4095,8 @@ function pushUploadMessage(fname) {
   if (c.title === "New chat") c.title = fname;
   let text = `Loaded **${fname}**: ${S.ds.nRows.toLocaleString()} rows and ${S.ds.vars.length} variables (${tl}).\n\n`;
   text += warn.length ? `I checked the file and found **${warn.length} thing${warn.length > 1 ? "s" : ""} to review** before analysing${fixable.length ? `; ${fixable.length === 1 ? "one has" : fixable.length + " have"} a one-click fix, or say "fix them"` : ""}.` : "I checked the file and found nothing that needs fixing.";
-  text += " Then ask me what you'd like to find out.";
-  c.messages.push({ role: "assistant", content: text, check: true, action: { type: "check" } });
+  text += " Then ask me what you'd like to find out, or tap a suggestion.";
+  c.messages.push({ role: "assistant", content: text, check: true, action: { type: "check" }, suggest: dataSuggestions(fixable.length) });
   saveChats();
 }
 
@@ -4115,11 +4130,12 @@ function sideHTML() {
       <button class="icon-btn side-x" data-act="side-close" aria-label="Close sidebar">${ICON.x}</button></div>
     <button class="side-new" data-act="chat-new">${ICON.plus}<span>New chat</span></button>
     <div class="side-scroll">
-      <div class="side-h">Tools</div>
-      <details class="side-grp" data-grp="method" ${grpIsOpen("method") ? "open" : ""}><summary>${ICON.book}<span>Plan a study</span></summary>${METHOD_TOOLS.map(t => toolBtn("method", t)).join("")}</details>
-      <details class="side-grp" data-grp="data" ${grpIsOpen("data") ? "open" : ""}><summary>${ICON.table}<span>Analyse data</span></summary>${DATA_TOOLS.map(t => toolBtn("data", t)).join("")}</details>
       <div class="side-h">Chats</div>
       ${S.chats.length ? S.chats.map(c => `<div class="side-chat ${S.section === "chat" && c.id === S.chatId ? "on" : ""}"><button class="side-item" data-act="chat-pick" data-id="${c.id}" title="${esc(c.title)}">${esc(c.title)}</button><button class="icon-btn sm" data-act="chat-del" data-id="${c.id}" aria-label="Delete chat">${ICON.trash}</button></div>`).join("") : `<p class="side-empty">Your chats will appear here.</p>`}
+      <details class="side-more" ${S.section !== "chat" ? "open" : ""}><summary>More tools</summary>
+        <details class="side-grp" data-grp="method" ${grpIsOpen("method") ? "open" : ""}><summary>${ICON.book}<span>Plan a study</span></summary>${METHOD_TOOLS.map(t => toolBtn("method", t)).join("")}</details>
+        <details class="side-grp" data-grp="data" ${grpIsOpen("data") ? "open" : ""}><summary>${ICON.table}<span>Analyse data</span></summary>${DATA_TOOLS.map(t => toolBtn("data", t)).join("")}</details>
+      </details>
     </div>
     <div class="side-foot">
       <div class="side-data"><span class="side-h" style="padding:0">Data in use</span><b title="${esc(S.dsSource)}">${esc(S.dsSource)}</b><small>${S.ds ? `${S.ds.nRows.toLocaleString()} rows · ${S.ds.vars.length} variables` : ""}</small>
@@ -4130,7 +4146,7 @@ function sideHTML() {
 function composerHTML(big) {
   return `<form id="qa-chat-form" class="composer ${big ? "big" : ""}">
       <label class="icon-btn attach" title="Upload a CSV or Excel file">${ICON.clip}<input type="file" id="qa-chat-file" accept=".csv,.txt,.tsv,.xlsx,.xls" hidden><span class="sr">Upload data</span></label>
-      <textarea id="qa-chat-input" rows="1" maxlength="580" placeholder="Message QuantAI" aria-label="Message QuantAI"></textarea>
+      <textarea id="qa-chat-input" rows="1" maxlength="580" placeholder="Ask a question, or attach your data" aria-label="Message QuantAI"></textarea>
       <button type="submit" class="send" aria-label="Send" ${S.chatBusy ? "disabled" : ""}>${ICON.up}</button>
     </form>`;
 }
@@ -4146,7 +4162,7 @@ function renderChatMain() {
   if (!msgs.length && !S.chatBusy) {
     return `<div class="chat-empty">
       <div class="chat-hello"><img src="assets/img/logo-mark.webp" alt="" width="44" height="44"><h1>What would you like to find out?</h1>
-        <p>Ask about your study or your data in plain English. QuantAI runs the statistics, checks the assumptions and explains the results.</p></div>
+        <p>Type your research topic or question, or attach your data with the clip. QuantAI runs the statistics, checks the assumptions and explains the results.</p></div>
       ${composerHTML(true)}
       <div class="suggest">${SUGGEST().map(([a, b, t]) => `<button type="button" data-act="chat-starter" data-text="${esc(t)}"><b>${esc(a)}</b><span>${esc(b)}</span></button>`).join("")}</div>
       <p class="chat-data">Using <b>${esc(S.dsSource)}</b>. Attach your own CSV or Excel file with the clip, or from the sidebar.</p>
@@ -4154,10 +4170,15 @@ function renderChatMain() {
   }
   return `<div class="chat-thread" id="qa-thread" aria-live="polite">
       ${msgs.map(m => m.role === "user" ? `<div class="msg you"><div class="bubble">${esc(m.content)}</div></div>`
-        : `<div class="msg bot"><img class="av" src="assets/img/logo-mark.webp" alt="" width="28" height="28"><div class="body"><div class="text ${m.note === "error" ? "err" : ""}">${aiFormat(m.content)}</div>${chatResultCard(m)}</div></div>`).join("")}
+        : `<div class="msg bot"><img class="av" src="assets/img/logo-mark.webp" alt="" width="28" height="28"><div class="body"><div class="text ${m.note === "error" ? "err" : ""}">${aiFormat(m.content)}</div>${chatResultCard(m)}${msgChips(m)}</div></div>`).join("")}
       ${S.chatBusy ? `<div class="msg bot"><img class="av" src="assets/img/logo-mark.webp" alt="" width="28" height="28"><div class="body"><div class="typing" aria-label="QuantAI is thinking"><i></i><i></i><i></i></div></div></div>` : ""}
     </div>
     <div class="chat-dock">${composerHTML(false)}<p class="disclaimer">QuantAI's engine computes every number. Explanations come from an AI assistant and can be wrong, so check anything important.</p></div>`;
+}
+function msgChips(m) {
+  const sug = (m.suggest || []).map(t => `<button type="button" class="chip" data-act="chat-starter" data-text="${esc(t)}">${esc(t)}</button>`).join("");
+  const tools = (m.tools || []).map(([sec, id, label]) => `<button type="button" class="chip tool" data-act="chat-open" data-sec="${esc(sec)}" data-tool="${esc(id)}">${esc(label)} →</button>`).join("");
+  return sug || tools ? `<div class="chips">${sug}${tools}</div>` : "";
 }
 function topHTML() {
   if (S.section === "chat") { const c = curChat(); return `<button class="icon-btn only-m" data-act="side-open" aria-label="Open sidebar">${ICON.menu}</button><span class="top-title">${esc(c && c.messages.length ? c.title : "QuantAI")}</span><button class="icon-btn only-m" data-act="chat-new" aria-label="New chat">${ICON.plus}</button>`; }

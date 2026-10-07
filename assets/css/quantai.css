@@ -484,3 +484,14 @@ body.qa-page { background: #fff; }
 .qa .dq .dq-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: .45rem; background: #9AA6B6; }
 .qa .dq .dq-warn .dq-dot { background: #C9741A; }
 .qa .dq li .btn { margin-left: .35rem; vertical-align: baseline; }
+
+/* Chat-first: tools folded away, suggestion chips under replies */
+.side-more { margin-top: 1rem; border-top: 1px solid #E1E6ED; padding-top: .4rem; }
+.side-more > summary { list-style: none; cursor: pointer; font-family: var(--f-mono); font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: #7C899B; padding: .6rem .6rem .35rem; display: flex; align-items: center; }
+.side-more > summary::-webkit-details-marker { display: none; }
+.side-more > summary::after { content: ""; margin-left: auto; width: 6px; height: 6px; border-right: 1.6px solid #8A96A8; border-bottom: 1.6px solid #8A96A8; transform: rotate(-45deg); transition: transform .15s; }
+.side-more[open] > summary::after { transform: rotate(45deg); }
+.chips { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .75rem; }
+.chips .chip { border: 1px solid #DDE3EA; background: #fff; color: var(--ink-2); border-radius: 999px; padding: .42rem .85rem; font: inherit; font-size: .86rem; cursor: pointer; text-align: left; transition: border-color .15s, color .15s, background .15s; }
+.chips .chip:hover { border-color: var(--navy); color: var(--navy); background: #F5F7FA; }
+.chips .chip.tool { color: var(--navy); font-weight: 600; }
