@@ -3,18 +3,19 @@
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
   <url>
     <loc>https://modelanalysishub.com/</loc>
-    <lastmod>2026-09-29</lastmod>
+    <lastmod>2026-10-06</lastmod>
     <image:image><image:loc>https://modelanalysishub.com/assets/img/amadu-kamal.jpg</image:loc></image:image>
     <image:image><image:loc>https://modelanalysishub.com/assets/img/sunshine-project-home.jpg</image:loc></image:image>
   </url>
   <url>
     <loc>https://modelanalysishub.com/founder.html</loc>
-    <lastmod>2026-09-29</lastmod>
+    <lastmod>2026-10-06</lastmod>
     <image:image><image:loc>https://modelanalysishub.com/assets/img/amadu-kamal-portrait.jpg</image:loc></image:image>
   </url>
   <url>
     <loc>https://modelanalysishub.com/projects.html</loc>
-    <lastmod>2026-09-29</lastmod>
+    <lastmod>2026-10-06</lastmod>
+    <image:image><image:loc>https://modelanalysishub.com/assets/img/soma-home.jpg</image:loc></image:image>
     <image:image><image:loc>https://modelanalysishub.com/assets/img/sunshine-project-home.jpg</image:loc></image:image>
     <image:image><image:loc>https://modelanalysishub.com/assets/img/sunshine-project-programmes.jpg</image:loc></image:image>
     <image:image><image:loc>https://modelanalysishub.com/assets/img/ghana-malaria-risk-map.jpg</image:loc></image:image>
@@ -24,6 +25,6 @@
   </url>
   <url>
     <loc>https://modelanalysishub.com/ai.html</loc>
-    <lastmod>2026-09-29</lastmod>
+    <lastmod>2026-10-06</lastmod>
   </url>
 </urlset>
