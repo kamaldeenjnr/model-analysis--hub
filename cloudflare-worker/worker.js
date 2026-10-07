@@ -17,7 +17,8 @@ const ALLOWED_ORIGINS = [
 const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
 // Tried in order; if Groq retires one, the next is used. Override with a MODEL variable in Cloudflare if needed.
-const MODELS = ['llama-3.3-70b-versatile', 'openai/gpt-oss-20b', 'llama-3.1-8b-instant'];
+// Each Groq model has its own free per-minute allowance, so when one is busy the next is tried.
+const MODELS = ['llama-3.3-70b-versatile', 'meta-llama/llama-4-scout-17b-16e-instruct', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3-32b', 'llama-3.1-8b-instant'];
 
 const MAX_MESSAGES = 10;      // conversation turns sent to the model
 const MAX_CHARS = 600;        // per message (the page trims questions to this)
@@ -209,6 +210,7 @@ export default {
       : agentMode ? `${AGENT_SYSTEM}\n\nSUMMARY:\n${body.context.slice(0, MAX_CONTEXT)}` : SYSTEM;
 
     const models = env.MODEL ? [env.MODEL, ...MODELS] : MODELS;
+    let sawBusy = false;
     for (const model of models) {
       let res;
       try {
@@ -226,12 +228,13 @@ export default {
       } catch {
         continue;
       }
-      if (res.status === 429) return json({ error: 'busy' }, 429, origin);
-      if (!res.ok) continue; // model retired or unavailable: try the next one
+      if (res.status === 429) { sawBusy = true; continue; } // this model's free allowance is used up: try the next
+      if (!res.ok) continue; // model retired, request too large or unavailable: try the next one
       const data = await res.json().catch(() => null);
       const reply = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-      if (reply) return json({ reply: reply.trim().slice(0, toolMode ? 2600 : 1500) }, 200, origin);
+      const clean = reply ? reply.replace(/<think>[\s\S]*?<\/think>/g, '').trim() : '';
+      if (clean) return json({ reply: clean.slice(0, toolMode ? 2600 : 1500) }, 200, origin);
     }
-    return json({ error: 'upstream_failed' }, 502, origin);
+    return sawBusy ? json({ error: 'busy' }, 429, origin) : json({ error: 'upstream_failed' }, 502, origin);
   },
 };

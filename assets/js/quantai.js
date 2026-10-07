@@ -3859,7 +3859,28 @@ function resolveVar(name, types) {
   const hit = vs.find(v => v.name === n) || vs.find(v => v.label.toLowerCase() === n) || vs.find(v => v.name.replace(/_/g, " ") === n.replace(/_/g, " ")) ||
     vs.find(v => v.label.toLowerCase().includes(n) || n.includes(v.label.toLowerCase()));
   if (hit && types && !types.includes(hit.type)) return null;
-  return hit || null;
+  if (hit) return hit;
+  return fuzzyVar(n, types);
+}
+/** Word-overlap match so "blood pressure", "gender" or "age" find "Systolic BP", "Sex", "Age (years)". */
+const VAR_SYN = { "blood pressure": "bp", "bloodpressure": "bp", gender: "sex", male: "sex", female: "sex", men: "sex", women: "sex", "men and women": "sex", "males and females": "sex", years: "age", old: "age", weight: "bmi", "body mass": "bmi", salt: "salt", smoking: "smoker", smokes: "smoker", school: "education", schooling: "education", rural: "residence", urban: "residence", location: "district", followup: "follow" };
+const VAR_STOP = new Set(["the", "of", "a", "an", "and", "in", "on", "for", "to", "with", "my", "is", "are", "level", "levels", "between", "by", "among", "people", "who", "have", "has", "rate", "rates", "number", "value", "values", "total", "data", "variable", "variables"]);
+function fuzzyVar(n, types) {
+  let q = " " + n.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ") + " ";
+  Object.keys(VAR_SYN).sort((a, b) => b.length - a.length).forEach(k => { q = q.split(" " + k + " ").join(" " + VAR_SYN[k] + " "); });
+  const qw = q.trim().split(" ").filter(w => w.length > 1 && !VAR_STOP.has(w));
+  if (!qw.length) return null;
+  let best = null, bestScore = 0;
+  varsUsable().forEach(v => {
+    if (types && !types.includes(v.type)) return;
+    const vw = (v.name + " " + v.label).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ");
+    let sc = 0;
+    qw.forEach(w => { if (vw.includes(w)) sc += 2; else if (w.length > 3 && vw.some(x => x.length > 3 && (x.startsWith(w) || w.startsWith(x)))) sc += 1; });
+    // prefer the plainest variable (e.g. "Systolic BP" over "Systolic BP 3 months")
+    sc -= vw.length * 0.01;
+    if (sc > bestScore) { bestScore = sc; best = v; }
+  });
+  return bestScore >= 1 ? best : null;
 }
 const ACTION_LABEL = { describe: "Describe", compare: "Compare & relate", regression: "Regression", survival: "Survival analysis", forecast: "Forecast", open: "Open tool", check: "Data check", fix: "Data fixes", report: "Report" };
 function addEntry(kind, params, result) {
@@ -3886,13 +3907,63 @@ function runAction(a) {
   if (a.type === "open") { const t = a.tool; if (METHOD_TOOLS.some(x => x.id === t)) return { nav: ["method", t] }; if (DATA_TOOLS.some(x => x.id === t)) return { nav: ["data", t] }; throw Object.assign(new Error(`There is no "${t}" tool.`), { user: true }); }
   throw Object.assign(new Error("I don't know how to run that yet."), { user: true });
 }
+const DIRECT_REPLY = {
+  compare: a => `Comparing **${vlabel(V(a.outcome) || { name: a.outcome })}** by **${vlabel(V(a.exposure) || { name: a.exposure })}**. QuantAI checked the assumptions and chose the test for you. The rules it applied are listed below the result.`,
+  regression: a => `Looking at what is associated with **${vlabel(V(a.outcome) || { name: a.outcome })}**, adjusting for ${a.predictors.length} variables at once${a.model === "modpoisson" ? ", reported as prevalence ratios" : a.model === "logistic" ? ", reported as odds ratios" : ""}. Change the variables in the full result if you want a different model.`,
+  survival: a => `Survival analysis of **${vlabel(V(a.event) || { name: a.event })}** over **${vlabel(V(a.time) || { name: a.time })}**${a.group ? ` by **${vlabel(V(a.group) || { name: a.group })}**` : ""}: Kaplan–Meier, log-rank test and Cox regression.`,
+  forecast: a => `Forecasting **${vlabel(V(a.value) || { name: a.value })}** for the next ${a.horizon} periods.`,
+  describe: a => `Here is a summary table of your variables${a.group ? ` by **${vlabel(V(a.group) || { name: a.group })}**` : ""}.`,
+  open: a => ({ design: "Opening the study design advisor. Answer a few questions and it recommends a design with the reasons.", sample: "Opening the sample size calculator.", test: "Opening the test selector. Tell it your outcome and comparison, and it picks the test and gives you the code.", question: "Opening the research question builder.", checklist: "Opening the reporting checklists." })[a.tool] || "Opening that tool.",
+  check: () => "Here is QuantAI's check of your data.",
+  fix: () => "Applying the suggested fixes.",
+  report: () => "Preparing your report.",
+};
+function OFFLINE_HELP() {
+  const vs = varsUsable(), demo = /\b(sex|gender|male|female|age)\b|_id$|\bid\b/i, nums = vs.filter(v => v.type === "continuous" && !demo.test(v.name + " " + v.label)), num = nums[0] || vs.find(v => v.type === "continuous"), cat = vs.find(v => ["binary", "categorical"].includes(v.type) && /\b(sex|gender)\b/i.test(v.name + " " + v.label)) || vs.find(v => ["binary", "categorical"].includes(v.type)), bins = vs.filter(v => v.type === "binary" && !demo.test(v.name + " " + v.label) && v !== cat), bin = bins.find(v => /hypertens|diabet|disease|status|outcome|positive|diagnos|infect|malaria|death|died|pass|default|anaemi|stunt/i.test(v.name + " " + v.label)) || bins[0];
+  const ex = [num && cat ? `compare ${vlabel(num)} by ${vlabel(cat)}` : null, bin ? `risk factors for ${vlabel(bin)}` : null, "describe my data", "check my data for problems"].filter(Boolean);
+  return `I couldn't work that one out on my own, and the AI assistant isn't answering right now. I can always do requests like these:\n\n${ex.map(x => "- " + x).join("\n")}\n\nYou can also open any tool from **Analyse data** or **Plan a study** on the left.`;
+}
 /** Offline fallback for the most common request when the assistant can't be reached. */
 function localIntent(text) {
+  const t = text.trim(), low = t.toLowerCase();
+  const clean = x => String(x || "").replace(/\b(use|using|as|with)\b.*$/i, "").replace(/[?.!,;:]+.*$/, "").replace(/^(the|a|an)\s+/i, "").trim();
+  const preferPR = /prevalence ratio|modified poisson/i.test(t), preferOR = /odds ratio|logistic/i.test(t);
+  // planning tools
+  if (/\b(study design|which design|what design|design (for|of) (a|my|the) study)\b/i.test(t)) return { type: "open", tool: "design" };
+  if (/\bsample size|how many (participants|people|respondents|subjects)\b/i.test(t)) return { type: "open", tool: "sample" };
+  if (/\b(which|what) (statistical )?test\b|choose a test/i.test(t)) return { type: "open", tool: "test" };
+  if (/\b(research question|objectives?|hypothes[ie]s)\b/i.test(t) && !/\b(test|compare|regression)\b/i.test(t)) return { type: "open", tool: "question" };
+  if (/\b(checklist|strobe|consort|stard|coreq|prisma)\b/i.test(t)) return { type: "open", tool: "checklist" };
+  // survival
+  if (/\b(survival|kaplan|log-?rank|cox|hazard|time to|lost to follow|loss to follow|drop ?out)\b/i.test(t)) {
+    const f = S.form.survival || {}, by = t.match(/\b(?:by|between|among (?:people|those|patients) with|for (?:people|those|patients) with|with)\s+(.+?)[?.!]*$/i);
+    const tv = (f.time && V(f.time)) || varsUsable().find(v => ["continuous", "count"].includes(v.type) && /time|month|day|week|year|follow|duration/i.test(v.name + " " + v.label));
+    const ev = (f.event && V(f.event)) || varsUsable().find(v => v.type === "binary" && /event|death|died|dead|lost|relapse|status|default/i.test(v.name + " " + v.label));
+    const g = by ? resolveVar(clean(by[1]), ["binary", "categorical"]) : (f.group ? V(f.group) : null);
+    if (tv && ev) return { type: "survival", time: tv.name, event: ev.name, group: g ? g.name : "", covariates: f.covs || [] };
+  }
+  // forecast
+  const fm = t.match(/\b(?:forecast|project|predict(?: the)? (?:next|future))\s+(.+?)(?:\s+for\b.*)?[?.!]*$/i);
+  if (fm) { const v = resolveVar(clean(fm[1]), ["continuous", "count"]); if (v) return { type: "forecast", value: v.name, horizon: (t.match(/(\d+)\s*(months?|weeks?|periods?|years?|days?)/i) || [])[1] || 12 }; }
+  // risk factors / what affects X -> regression
+  const rm = t.match(/(?:risk factors?|factors?|predictors?|determinants?|what)\s+(?:are\s+|is\s+)?(?:associated with|related to|linked to|for|of|affecting|that affect|affects?|drives?|influences?|predicts?|explains?)\s+(.+)$/i) || t.match(/^(?:predict|explain|model)\s+(.+)$/i);
+  if (rm) {
+    const out = resolveVar(clean(rm[1]));
+    if (out) {
+      const f = S.form.regression || {};
+      let preds = f.outcome === out.name && f.preds && f.preds.length ? f.preds.slice()
+        : varsUsable().filter(v => v.name !== out.name && ["binary", "categorical", "continuous", "count", "ordinal"].includes(v.type) && !/id$|_id|time|month|follow|date/i.test(v.name) && (v.nMissing || 0) < S.ds.nRows * 0.3).slice(0, 6).map(v => v.name);
+      if (preds.length) return { type: "regression", outcome: out.name, predictors: preds, model: preferPR ? "modpoisson" : preferOR ? "logistic" : (f.outcome === out.name && f.model) || "auto" };
+    }
+  }
   const m = text.match(/(?:compare|difference in|differ(?:ence)?s? in)\s+(.+?)\s+(?:by|between|across|among)\s+(.+?)[?.!]*$/i);
   if (/\b(check|clean|problems?|issues?|quality)\b.*\b(data|file|dataset)\b|\b(data|file)\b.*\b(check|clean|problems?|issues?)\b/i.test(text)) return { type: "check" };
   if (/^\s*(fix|apply)\b.*\b(them|all|fixes|problems?|data|it)\b/i.test(text)) return { type: "fix" };
   if (/\b(download|export|make|create|give)\b.*\breport\b/i.test(text)) return { type: "report" };
-  if (/\b(describe|summari[sz]e|table ?1|overview)\b.*\b(data|sample|variables|dataset)\b/i.test(text)) return { type: "describe", vars: [], group: "" };
+  if (/\b(describe|summari[sz]e|table ?1|overview|summary)\b/i.test(text)) { const g = text.match(/\bby\s+(.+?)[?.!]*$/i), gv = g ? resolveVar(clean(g[1]), ["binary", "categorical"]) : null; return { type: "describe", vars: [], group: gv ? gv.name : "" }; }
+  // "is X higher in/among Y", "does X differ by Y", "X vs Y"
+  const dm = t.match(/(?:is|are|does|do)\s+(.+?)\s+(?:higher|lower|different|differ|more|less|greater)\s+(?:in|among|for|by|between|across)\s+(.+?)[?.!]*$/i) || t.match(/^(.+?)\s+(?:vs\.?|versus)\s+(.+?)[?.!]*$/i);
+  if (dm) { const o = resolveVar(clean(dm[1])), e = resolveVar(clean(dm[2])); if (o && e && o.name !== e.name) return { type: "compare", outcome: o.name, exposure: e.name, paired: false }; }
   if (m) { const o = resolveVar(m[1]), e = resolveVar(m[2].replace(/^(the )?(groups? of |categories of )/i, "").replace(/\b(men and women|males? and females?)\b/i, "sex")); if (o && e) return { type: "compare", outcome: o.name, exposure: e.name, paired: false }; }
   return null;
 }
@@ -3914,13 +3985,17 @@ async function sendChatMessage(text) {
   if (c.title === "New chat") c.title = text.slice(0, 60);
   S.chatBusy = true; saveChats(); render();
   let reply, action, note = null;
-  try {
+  const direct = localIntent(text);
+  if (direct) {
+    reply = DIRECT_REPLY[direct.type] ? DIRECT_REPLY[direct.type](direct) : "Done.";
+    action = direct;
+  } else try {
     const hist = c.messages.filter(m => m.role === "user" || m.role === "assistant").slice(-10).map(m => ({ role: m.role, content: m.role === "assistant" && m.action ? `${m.content}\n[QuantAI ran: ${JSON.stringify(m.action)}]` : m.content }));
     ({ reply, action } = parseAgent(await askAI("agent", agentContext(), hist)));
   } catch (e) {
     const local = localIntent(text);
-    if (local) { reply = "The assistant can't be reached right now, so I ran this directly with QuantAI's rules."; action = local; }
-    else { reply = aiErrText(e.code) + " You can still run any analysis from the Data analysis tools, or try a request like \"compare systolic_bp by sex\"."; action = null; note = "error"; }
+    if (local) { reply = "I ran this directly with QuantAI's rules."; action = local; }
+    else { reply = OFFLINE_HELP(); action = null; note = "help"; }
   }
   const msg = { role: "assistant", content: reply, action: action || null, note };
   const acts = Array.isArray(action) ? action.filter(a => a && typeof a === "object").slice(0, 4) : action ? [action] : [];
