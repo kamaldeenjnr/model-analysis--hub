@@ -1,11 +1,16 @@
 /**
  * Model Analysis Hub: "Ask about Amadu" AI assistant.
- * A Cloudflare Worker that sits between the website and Groq, so the Groq API key never reaches the browser.
+ * A Cloudflare Worker that sits between the website and the AI providers (Google Gemini first, Groq as backup),
+ * so the API keys never reach the browser.
  *
  * Setup (Cloudflare dashboard):
  *   1. Workers & Pages > Create > Create Worker > name it "mah-assistant" > Deploy.
  *   2. Edit code > replace everything with this file > Deploy.
- *   3. Settings > Variables and Secrets > Add > Type "Secret", Name GROQ_API_KEY, Value = your Groq key > Deploy.
+ *   3. Settings > Variables and Secrets > Add > Type "Secret":
+ *        GEMINI_API_KEY = your Google Gemini key (answers first)
+ *        GROQ_API_KEY   = your Groq key (backup)
+ *      Either one on its own also works. Then Deploy.
+ *   Optional plain-text variables: GEMINI_MODEL or MODEL to try a specific model first.
  * No secrets live in this file.
  */
 
@@ -18,6 +23,8 @@ const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
 
 // Tried in order; if Groq retires one, the next is used. Override with a MODEL variable in Cloudflare if needed.
 // Each Groq model has its own free per-minute allowance, so when one is busy the next is tried.
+// Gemini models, newest first; if Google retires one, the next is used.
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite'];
 const MODELS = ['llama-3.3-70b-versatile', 'meta-llama/llama-4-scout-17b-16e-instruct', 'openai/gpt-oss-20b', 'openai/gpt-oss-120b', 'qwen/qwen3-32b', 'llama-3.1-8b-instant'];
 
 const MAX_MESSAGES = 10;      // conversation turns sent to the model
@@ -195,7 +202,7 @@ export default {
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
     if (rateLimited(ip)) return json({ error: 'rate_limited' }, 429, origin);
 
-    if (!env.GROQ_API_KEY) return json({ error: 'not_configured' }, 503, origin);
+    if (!env.GROQ_API_KEY && !env.GEMINI_API_KEY) return json({ error: 'not_configured' }, 503, origin);
 
     let body;
     try { body = await request.json(); } catch { return json({ error: 'bad_json' }, 400, origin); }
@@ -210,20 +217,26 @@ export default {
       : methodsMode ? `${METHODS_SYSTEM}\n\nCONTEXT:\n${body.context.slice(0, MAX_CONTEXT)}`
       : agentMode ? `${AGENT_SYSTEM}\n\nSUMMARY:\n${body.context.slice(0, MAX_CONTEXT)}` : SYSTEM;
 
-    const models = env.MODEL ? [env.MODEL, ...MODELS] : MODELS;
+    // Gemini first (stronger reasoning), then every Groq model; each has its own free allowance.
+    const routes = [];
+    if (env.GEMINI_API_KEY) (env.GEMINI_MODEL ? [env.GEMINI_MODEL, ...GEMINI_MODELS] : GEMINI_MODELS).forEach(model => routes.push({ provider: 'gemini', model }));
+    if (env.GROQ_API_KEY) (env.MODEL ? [env.MODEL, ...MODELS] : MODELS).forEach(model => routes.push({ provider: 'groq', model }));
     let sawBusy = false;
-    for (const model of models) {
+    for (const { provider, model } of routes) {
+      const gemini = provider === 'gemini';
       let res;
       try {
-        res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        res = await fetch(gemini ? 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions' : 'https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+          headers: { 'Authorization': `Bearer ${gemini ? env.GEMINI_API_KEY : env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             model,
             messages: [{ role: 'system', content: system }, ...messages],
             temperature: dataMode || agentMode ? 0.2 : methodsMode ? 0.3 : 0.4,
-            max_tokens: agentMode ? 1100 : toolMode ? 800 : 350,
-            ...(agentMode ? { response_format: { type: 'json_object' } } : {}),
+            // Gemini "thinks" before answering and that counts towards the limit, so it gets more room
+            max_tokens: gemini ? (agentMode ? 4000 : toolMode ? 3000 : 1500) : (agentMode ? 1100 : toolMode ? 800 : 350),
+            ...(gemini ? { reasoning_effort: 'low' } : {}),
+            ...(agentMode && !gemini ? { response_format: { type: 'json_object' } } : {}),
           }),
         });
       } catch {
