@@ -16,6 +16,7 @@ Amadu Kamal built his skills through mentors and real projects. He combines the 
 - [Home](https://modelanalysishub.com/): Who Amadu Kamal is, what he does, selected work and contact details.
 - [About Amadu Kamal](https://modelanalysishub.com/founder.html): Full biography, toolkit and milestones.
 - [Projects](https://modelanalysishub.com/projects.html): Case studies of his models, dashboards and web platforms, including Soma, his food delivery platform for the Volta Region.
+- [Opportunities](https://modelanalysishub.com/opportunities.html): Fully funded scholarships, fellowships, internships, data jobs and competitions open to Ghanaians and Africans, with criteria and deadlines, updated weekly.
 - [QuantAI](https://modelanalysishub.com/ai.html): Free research methods and statistics tool. Plan a study, upload a spreadsheet, and get assumption-checked tests, regression, forecasts and matching Stata, Python, R and SPSS code.
 
 ## Expertise
