@@ -154,6 +154,7 @@
     items=(d.items||[]).filter(function(o){return !o.deadline||days(o.deadline)>=0});
     items.sort(function(a,b){if(a.deadline&&b.deadline)return a.deadline<b.deadline?-1:1;if(a.deadline)return -1;if(b.deadline)return 1;return 0});
     meta.textContent=items.length+' open or upcoming · updated '+fmt(d.updated);
+    document.querySelectorAll('.chips button').forEach(function(b){var f=b.dataset.f,n=items.filter(function(o){return f==='all'?true:f==='soon'?(o.deadline&&days(o.deadline)<=30):f.split(' ').indexOf(o.type)>=0}).length;b.textContent+=' ('+n+')';});
     render();
   }).catch(function(){meta.textContent='The list could not load. Please refresh the page.'});
 })();
