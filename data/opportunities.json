@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-21",
+ "updated": "2026-10-22",
  "items": [
   {
    "title": "Commonwealth Shared Scholarships",
@@ -15,11 +15,11 @@
     "Not studied or worked a year or more in a high-income country",
     "Apply to the university and through CSC Central"
    ],
-   "deadline": null,
-   "deadline_note": "Open now at many UK universities. Each university sets its own date (e.g. Imperial: 6 January 2027) — check the CSC list of courses.",
+   "deadline": "2026-12-08",
+   "deadline_note": "CSC applications open 10 November and close 8 December 2026, 16:00 GMT. Apply to the university too — each sets its own course deadline.",
    "url": "https://cscuk.fcdo.gov.uk/scholarships/commonwealth-shared-scholarships/",
    "fit": "For candidates who have not studied abroad before.",
-   "verified": false
+   "verified": true
   },
   {
    "title": "Gates Cambridge Scholarship 2027/28",
@@ -615,7 +615,7 @@
     "Two-page concept note plus CV"
    ],
    "deadline": "2026-11-15",
-   "deadline_note": "Regular deadline 15 November; final extension 6 December 2026.",
+   "deadline_note": "Early round 25 October; regular 15 November; final extension 6 December 2026 (midnight PT).",
    "url": "https://d-prize.org/",
    "fit": "A venture delivering malaria prevention in the Volta Region.",
    "verified": false
@@ -824,6 +824,83 @@
    "url": "https://terumohackathon.talo.africa/",
    "fit": "A health data system build — dashboards and JavaScript apply directly.",
    "verified": true
+  },
+  {
+   "title": "CMU-Africa Master's (IT, Engineering AI, ECE)",
+   "type": "scholarship",
+   "provider": "Carnegie Mellon University Africa",
+   "where": "Kigali, Rwanda",
+   "level": "Master's",
+   "fields": "Information Technology, Engineering Artificial Intelligence, Electrical & Computer Engineering",
+   "funding": "Financial aid for admitted African applicants, incl. Mastercard Foundation Scholars places (tuition, living costs, travel)",
+   "eligibility": [
+    "African national",
+    "Relevant bachelor's",
+    "English test (DET, IELTS or TOEFL)",
+    "No application fee"
+   ],
+   "deadline": "2027-01-15",
+   "deadline_note": "Early deadline 15 December 2026 (CMU-Africa pays test fees); final 15 January 2027. Submit the financial aid form after applying.",
+   "url": "https://www.africa.engineering.cmu.edu/admissions/how-to-apply/index.html",
+   "fit": "US-accredited CS/AI master's in Africa that builds on his Soma and QuantAI work.",
+   "verified": true
+  },
+  {
+   "title": "CMU-Africa Certificate in AI for Africa",
+   "type": "training",
+   "provider": "Carnegie Mellon University Africa",
+   "where": "Online",
+   "level": "Graduates & professionals",
+   "fields": "Python for AI, ML maths, machine learning, generative AI",
+   "funding": "Free for selected applicants",
+   "eligibility": [
+    "Basic linear algebra, probability and statistics",
+    "Programming experience",
+    "Laptop and reliable internet",
+    "About 5–6 hours a week"
+   ],
+   "deadline": "2026-11-15",
+   "deadline_note": "Cohort starts 17 January 2027. Date from listings — confirm on the CMU-Africa page.",
+   "url": "https://www.africa.engineering.cmu.edu/academics/ai-certificate/",
+   "fit": "Free CMU credential that strengthens ML skills for QuantAI and grad applications.",
+   "verified": false
+  },
+  {
+   "title": "Hong Kong PhD Fellowship Scheme 2027/28",
+   "type": "scholarship",
+   "provider": "Research Grants Council, Hong Kong",
+   "where": "Hong Kong",
+   "level": "PhD",
+   "fields": "All fields, incl. statistics, data science, public health",
+   "funding": "HK$344,400/year stipend, tuition waiver at many universities, conference grant",
+   "eligibility": [
+    "Open to all nationalities",
+    "Strong academic and research record",
+    "Apply to the RGC portal and a Hong Kong university"
+   ],
+   "deadline": "2026-12-01",
+   "deadline_note": "RGC initial application closes 1 December 2026, 12:00 noon HKT; university forms close the same day.",
+   "url": "https://www.polyu.edu.hk/gs/prospective-students/hkpfs/",
+   "fit": "Well-funded PhD route for climate-malaria modelling at HKU or CUHK public health.",
+   "verified": true
+  },
+  {
+   "title": "Google Africa Virtual Algorithms Workshop",
+   "type": "training",
+   "provider": "Google",
+   "where": "Online",
+   "level": "Students & recent graduates",
+   "fields": "Data structures, algorithms, coding interviews",
+   "funding": "Free",
+   "eligibility": [
+    "CS or engineering student, or recent graduate",
+    "Aged 18+"
+   ],
+   "deadline": "2026-10-31",
+   "deadline_note": "Live session Saturday 31 October 2026, 12:00–14:00 GMT. Register before.",
+   "url": "https://rsvp.withgoogle.com/events/algorithms-workshop-africa-2026_50f6a0_26176b/home",
+   "fit": "Quick prep for tech job interviews.",
+   "verified": false
   }
  ]
 }
