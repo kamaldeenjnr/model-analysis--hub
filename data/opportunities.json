@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-22",
+ "updated": "2026-10-26",
  "items": [
   {
    "title": "Commonwealth Shared Scholarships",
@@ -788,44 +788,6 @@
    "verified": true
   },
   {
-   "title": "AI Solutions Architect – Code for Africa",
-   "type": "job",
-   "provider": "Code for Africa",
-   "where": "Remote (Ghana time zone eligible)",
-   "level": "3+ years",
-   "fields": "AI workflows, APIs, data integration",
-   "funding": "",
-   "eligibility": [
-    "Degree in CS or data, or equivalent experience",
-    "3+ years building tools or AI workflows",
-    "Git and API experience"
-   ],
-   "deadline": "2026-10-23",
-   "deadline_note": "Apply with CV and a one-page note.",
-   "url": "https://opportunities.codeforafrica.org/2026/10/07/ai-solutions-architect-ai-sandbox-techlab/",
-   "fit": "Remote pan-African role close to his QuantAI and web work.",
-   "verified": true
-  },
-  {
-   "title": "Terumo BCT Africa Hackathon 2026",
-   "type": "competition",
-   "provider": "Terumo BCT / Talo Africa",
-   "where": "Virtual or Nairobi",
-   "level": "Ages 18–35",
-   "fields": "Health information systems, AI",
-   "funding": "USD 5,000 to the winner",
-   "eligibility": [
-    "African descent, aged 18–35",
-    "Individuals or teams up to 5",
-    "Working prototype with open or synthetic data"
-   ],
-   "deadline": "2026-10-25",
-   "deadline_note": "Closes 23:59 EAT. Showcase 13 November.",
-   "url": "https://terumohackathon.talo.africa/",
-   "fit": "A health data system build — dashboards and JavaScript apply directly.",
-   "verified": true
-  },
-  {
    "title": "CMU-Africa Master's (IT, Engineering AI, ECE)",
    "type": "scholarship",
    "provider": "Carnegie Mellon University Africa",
@@ -901,6 +863,81 @@
    "url": "https://rsvp.withgoogle.com/events/algorithms-workshop-africa-2026_50f6a0_26176b/home",
    "fit": "Quick prep for tech job interviews.",
    "verified": false
+  },
+  {
+   "title": "Advisor, Right-Fit Evidence – IPA",
+   "type": "job",
+   "provider": "Innovations for Poverty Action (IPA)",
+   "where": "Ghana, Kenya, Côte d'Ivoire, Nigeria or Uganda (office, hybrid or remote)",
+   "level": "Early–mid career",
+   "fields": "Monitoring, evaluation and learning; data systems; evidence advisory",
+   "funding": "Paid full-time role",
+   "eligibility": [
+    "Bachelor's in economics, statistics, social science or related",
+    "2–5 years' relevant experience",
+    "Based in an eligible country, fluent English"
+   ],
+   "deadline": "2026-11-01",
+   "deadline_note": "Apply by 1 November 2026.",
+   "url": "https://poverty-action.org/advisor-right-fit-evidence-11",
+   "fit": "Helps NGOs build M&E and data systems — close to his dashboards and NGO work.",
+   "verified": true
+  },
+  {
+   "title": "Imperial College President's PhD Scholarships 2027/28",
+   "type": "scholarship",
+   "provider": "Imperial College London",
+   "where": "London, UK",
+   "level": "PhD",
+   "fields": "Any, incl. infectious disease epidemiology and modelling",
+   "funding": "Full fees, £27,036 a year stipend, £2,000 a year research costs",
+   "eligibility": [
+    "First-class degree (or Master's with distinction)",
+    "Agreed supervisor before applying",
+    "Open to all nationalities"
+   ],
+   "deadline": "2027-01-11",
+   "deadline_note": "Rounds close 2 Nov 2026, 11 Jan 2027 and 1 Mar 2027 (23:59 UK). Contact a supervisor first.",
+   "url": "https://www.imperial.ac.uk/study/fees-and-funding/postgraduate-doctoral/grants-scholarships/presidents-phd/",
+   "fit": "Imperial's infectious disease modelling centre is a natural home for malaria–climate research.",
+   "verified": true
+  },
+  {
+   "title": "Eric Bleumink Fund (University of Groningen)",
+   "type": "scholarship",
+   "provider": "University of Groningen",
+   "where": "Groningen, Netherlands",
+   "level": "Master's",
+   "fields": "Any Groningen Master's, incl. data science and public health",
+   "funding": "Full: tuition, travel, living costs, books, insurance",
+   "eligibility": [
+    "Ghanaian nationals eligible",
+    "Excellent grades and English",
+    "No other means of funding"
+   ],
+   "deadline": "2026-12-01",
+   "deadline_note": "No separate form: complete the Master's application before 1 December; the university nominates candidates.",
+   "url": "https://www.rug.nl/education/scholarships/eric-bleumink-fund",
+   "fit": "Fully funded route into strong Dutch data science and health programmes.",
+   "verified": true
+  },
+  {
+   "title": "Obama Foundation Leaders: Africa",
+   "type": "fellowship",
+   "provider": "Obama Foundation",
+   "where": "Africa (virtual and in person)",
+   "level": "Emerging leaders",
+   "fields": "Civic leadership, public health, social impact",
+   "funding": "Free leadership programme",
+   "eligibility": [
+    "Africa-based leader with a clear issue focus",
+    "Track record in public, civil society or private sector"
+   ],
+   "deadline": null,
+   "deadline_note": "Applications open 9 November 2026; deadline to be announced.",
+   "url": "https://www.obama.org/programs/leaders/africa",
+   "fit": "Recognises his Sunshine Project NGO and public health work.",
+   "verified": true
   }
  ]
 }
