@@ -15,7 +15,7 @@ Amadu Kamal built his skills through mentors and real projects. He combines the 
 
 - [Home](https://modelanalysishub.com/): Who Amadu Kamal is, what he does, selected work and contact details.
 - [About Amadu Kamal](https://modelanalysishub.com/founder.html): Full biography, toolkit and milestones.
-- [Projects](https://modelanalysishub.com/projects.html): Case studies of his models, dashboards and web platforms, including Soma, his food delivery platform for the Volta Region.
+- [Projects](https://modelanalysishub.com/projects.html): Case studies of his models, dashboards and web platforms, including SafeWatch, his water emergency alert system for the Volta Lake, and Soma, his food delivery platform for the Volta Region.
 - [Opportunities](https://modelanalysishub.com/opportunities.html): Fully funded scholarships, fellowships, internships, data jobs and competitions open to Ghanaians and Africans, with criteria and deadlines, updated weekly.
 - [QuantAI](https://modelanalysishub.com/ai.html): Free research methods and statistics tool. Plan a study, upload a spreadsheet, and get assumption-checked tests, regression, forecasts and matching Stata, Python, R and SPSS code.
 
@@ -29,6 +29,7 @@ Amadu Kamal built his skills through mentors and real projects. He combines the 
 
 ## Projects
 
+- [SafeWatch](https://modelanalysishub.com/projects.html#safewatch) (2026, grant project): Water emergency alerts for the Volta Lake in Ghana, designed and built by Amadu Kamal. An SOS with location reaches the person on duty from an Android app, a browser app, SMS or a USSD dial code; unanswered alerts go to the backup, the coordinator and the closest responder; a missed trip check-in raises an alert by itself; storm warnings in Ewe, Twi and English. Live at https://safewatch-xyqr.onrender.com. Tools: Python, FastAPI, PostgreSQL, React, TypeScript, React Native, Africa's Talking, Render.
 - [Soma](https://modelanalysishub.com/projects.html#soma) (2026, own product): A local food delivery platform for Ho, Hohoe and the Volta Region in Ghana, designed and built by Amadu Kamal. Customer, vendor, rider and admin apps; Mobile Money and card payments through Paystack with automatic payouts; phone notifications; installable web app. Live at https://soma-wmql.onrender.com, source at https://github.com/kamaldeenjnr/soma. Tools: Node.js, Express, SQLite, JavaScript, Paystack, Render.
 - [The Sunshine Project website](https://modelanalysishub.com/projects.html#sunshine-project) (2026, client project): A multi-page website for The Sunshine Project, a Ghanaian NGO, designed and built by Amadu Kamal. Includes an admin login so the NGO's team updates programmes, schedules and photos themselves. Live at https://sunshine-project-website.vercel.app. Tools: HTML, CSS, JavaScript, Python, Decap CMS, Vercel.
 - [Malaria risk prediction model, Ghana](https://modelanalysishub.com/projects.html#malaria-risk) (2025): A spatial model combining climate and population data to rank Ghana's regions by predicted malaria risk. Tools: Python, R, ArcGIS.

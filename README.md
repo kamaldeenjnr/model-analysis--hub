@@ -47,9 +47,9 @@ cloudflare-worker/worker.js              Assistant endpoint (API key kept as a W
 ## Selected work
 
 <a href="https://modelanalysishub.com/projects.html#malaria-risk"><img src=".github/readme/malaria.webp" width="49%" alt="Malaria risk across Ghana"></a>
-<a href="https://modelanalysishub.com/projects.html"><img src="assets/img/soma-home-720.webp" width="49%" alt="Soma food delivery platform"></a>
+<a href="https://modelanalysishub.com/projects.html#safewatch"><img src="assets/img/safewatch-home-720.webp" width="49%" alt="SafeWatch water emergency alerts"></a>
 
-Malaria risk mapping for Ghana, Soma (food delivery for the Volta Region), The Sunshine Project NGO website, ProjectFlow and health dashboards. [See all projects →](https://modelanalysishub.com/projects.html)
+SafeWatch (water emergency alerts for the Volta Lake), malaria risk mapping for Ghana, Soma (food delivery for the Volta Region), The Sunshine Project NGO website, ProjectFlow and health dashboards. [See all projects →](https://modelanalysishub.com/projects.html)
 
 <br>
 
