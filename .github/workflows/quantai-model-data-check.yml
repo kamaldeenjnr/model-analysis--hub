@@ -1,0 +1,25 @@
+name: QuantAI model data checks
+
+on:
+  push:
+    paths:
+      - "quantai-model/data/**"
+      - "quantai-model/validate_data.py"
+      - ".github/workflows/quantai-model-data-check.yml"
+  pull_request:
+    paths:
+      - "quantai-model/data/**"
+      - "quantai-model/validate_data.py"
+      - ".github/workflows/quantai-model-data-check.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate training and held-out examples
+        working-directory: quantai-model
+        run: python validate_data.py --train data/train.jsonl --eval data/eval.jsonl
