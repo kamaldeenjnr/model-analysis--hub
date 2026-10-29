@@ -19,7 +19,7 @@ Never invent variable names, results, coefficients, p-values, confidence interva
 For a tool action, action may be one object or a list of up to four action objects when multiple actions are needed. Every action must use the schemas below. Include EVERY listed key, including keys whose value is null, false, or an empty list. Do not omit keys and do not add extra keys.
 - describe: {"type":"describe","vars":["exact_variable_name"],"group":null}; vars must list the requested variables from context and group is a variable name or null.
 - compare: {"type":"compare","outcome":"exact_variable_name","exposure":"exact_variable_name","paired":false}; paired must always be true or false.
-- regression: {"type":"regression","outcome":"exact_variable_name","predictors":["exact_variable_name"],"model":"auto","cluster":null}; model must be one of auto, linear, logistic, modpoisson, poisson, ordinal, multinomial, mixed. Use the requested model; use auto only when the user has not specified a model. cluster is a variable name or null.
+- regression: {"type":"regression","outcome":"exact_variable_name","predictors":["exact_variable_name"],"model":"auto","cluster":null,"offset":null}; model must be one of auto, linear, logistic, modpoisson, poisson, ordinal, multinomial, mixed. Use the requested model; use auto only when the user has not specified a model. cluster is a variable name or null. offset is null unless the user requests a count rate with a positive exposure/person-time variable; then set offset to that variable name, use model "poisson", and do NOT add the offset variable to predictors. The deterministic engine will use log(exposure) as the offset.
 - survival: {"type":"survival","time":"exact_variable_name","event":"exact_variable_name","group":null,"covariates":[]}; group is a variable name or null and covariates is always a list.
 - forecast: {"type":"forecast","date":null,"value":"exact_variable_name","horizon":4}; date is the date/time variable name or null, value is the series variable, and horizon is an integer from 1 to 120.
 - check: {"type":"check"}
@@ -63,7 +63,7 @@ def parse_output(text: str) -> Any:
 ACTION_KEYS = {
     "describe": {"type", "vars", "group"},
     "compare": {"type", "outcome", "exposure", "paired"},
-    "regression": {"type", "outcome", "predictors", "model", "cluster"},
+    "regression": {"type", "outcome", "predictors", "model", "cluster", "offset"},
     "survival": {"type", "time", "event", "group", "covariates"},
     "forecast": {"type", "date", "value", "horizon"},
     "check": {"type"}, "fix": {"type"}, "report": {"type"},
@@ -89,7 +89,9 @@ def valid_action_item(item: Any) -> bool:
         return (isinstance(item["outcome"], str) and isinstance(item["predictors"], list)
                 and all(isinstance(v, str) for v in item["predictors"])
                 and isinstance(item["model"], str) and item["model"] in REGRESSION_MODELS
-                and (item["cluster"] is None or isinstance(item["cluster"], str)))
+                and (item["cluster"] is None or isinstance(item["cluster"], str))
+                and ("offset" in item and (item["offset"] is None or isinstance(item["offset"], str)))
+                and (item["offset"] is None or item["model"] == "poisson"))
     if kind == "survival":
         return (isinstance(item["time"], str) and isinstance(item["event"], str)
                 and (item["group"] is None or isinstance(item["group"], str))
