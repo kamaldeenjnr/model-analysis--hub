@@ -1,35 +1,39 @@
 #!/usr/bin/env python3
-"""Evaluate QuantAI outputs for JSON schema and supported action-routing accuracy."""
+"""Evaluate a QuantAI model on held-out cases.
+
+The model sees exactly what the local API sends it (prompting.py), and every
+output is scored by scoring.py: contract validity, strict and lenient action
+match, field-level accuracy, correct declining/clarifying, numbers that are
+not in the context, and per-intent results with 95% confidence intervals.
+
+Examples
+  # fine-tuned adapter (v4 prompt)
+  python evaluate.py --model outputs/quantai-qwen3-4b-lora-v4 --cases data/v4/eval.jsonl --report outputs/v4-eval.json
+  # untouched base model with the same prompt
+  python evaluate.py --baseline-only --cases data/v4/eval.jsonl --report outputs/base-eval.json
+  # v3 adapter, served with the v3 prompt it was trained on
+  python evaluate.py --model outputs/quantai-qwen3-4b-lora-v3 --prompt-version v3 --cases data/v4/eval.jsonl --report outputs/v3-eval.json
+  # exported (merged) model in fp16
+  python evaluate.py --model outputs/quantai-merged-model-v4 --precision float16 --cases data/v4/eval.jsonl --report outputs/v4-merged-eval.json
+"""
 from __future__ import annotations
 
 import argparse
 import json
-import re
+import sys
+import time
 from pathlib import Path
 from typing import Any
 
 import torch
-from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-SYSTEM_PROMPT = """You are QuantAI, a research-methods and biostatistics assistant.
-Return exactly one JSON object with exactly two top-level keys: "reply" and "action".
-For a question or explanation that does not request a tool, set "action": null.
-Never invent variable names, results, coefficients, p-values, confidence intervals, sample sizes, or diagnostics. The deterministic engine computes statistics. Ask a concise clarification and set action to null when required information is unavailable.
-For a tool action, action may be one object or a list of up to four action objects when multiple actions are needed. Every action must use the schemas below. Include EVERY listed key, including keys whose value is null, false, or an empty list. Do not omit keys and do not add extra keys.
-- describe: {"type":"describe","vars":["exact_variable_name"],"group":null}; vars must list the requested variables from context and group is a variable name or null.
-- compare: {"type":"compare","outcome":"exact_variable_name","exposure":"exact_variable_name","paired":false}; paired must always be true or false.
-- regression: {"type":"regression","outcome":"exact_variable_name","predictors":["exact_variable_name"],"model":"auto","cluster":null,"offset":null}; model must be one of auto, linear, logistic, modpoisson, poisson, ordinal, multinomial, mixed. Use the requested model; use auto only when the user has not specified a model. cluster is a variable name or null. offset is null unless the user requests a count rate with a positive exposure/person-time variable; then set offset to that variable name, use model "poisson", and do NOT add the offset variable to predictors. The deterministic engine will use log(exposure) as the offset.
-- survival: {"type":"survival","time":"exact_variable_name","event":"exact_variable_name","group":null,"covariates":[]}; group is a variable name or null and covariates is always a list.
-- forecast: {"type":"forecast","date":null,"value":"exact_variable_name","horizon":4}; date is the date/time variable name or null, value is the series variable, and horizon is an integer from 1 to 120.
-- check: {"type":"check"}
-- fix: {"type":"fix"}
-- report: {"type":"report"}
-- open: {"type":"open","tool":"regression"}; tool must be one of data, describe, compare, regression, survival, forecast, export, question, design, sample, test, checklist.
-If a request needs a feature or parameter that the action schema cannot represent, do not silently drop it: ask for clarification or explain the limitation and set action to null.
-Distinguish association from causation and odds ratios from risk or prevalence ratios. Do not claim an analysis has run until the deterministic engine returns results.
-"""
-SUPPORTED_ACTIONS = {"describe", "compare", "regression", "survival", "forecast", "check", "fix", "report", "open"}
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
+import prompting  # noqa: E402
+import scoring  # noqa: E402
+
+DEFAULT_BASE = "Qwen/Qwen3-4B-Instruct-2507"
 
 
 def load_cases(path: Path) -> list[dict[str, Any]]:
@@ -42,209 +46,119 @@ def load_cases(path: Path) -> list[dict[str, Any]]:
             expected = json.loads(case["completion"])
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
             raise ValueError(f"{path}:{line_no}: invalid evaluation case: {exc}") from exc
-        if not isinstance(case.get("prompt"), str) or not isinstance(expected, dict):
-            raise ValueError(f"{path}:{line_no}: prompt/completion schema is invalid")
+        if not (isinstance(case.get("prompt"), str) or isinstance(case.get("message"), str)):
+            raise ValueError(f"{path}:{line_no}: a case needs a prompt (v3) or message (v4)")
         if set(expected) != {"reply", "action"} or not isinstance(expected["reply"], str):
             raise ValueError(f"{path}:{line_no}: expected completion keys are reply and action")
-        cases.append({"prompt": case["prompt"], "expected": expected})
+        cases.append(case)
     if not cases:
         raise ValueError(f"No cases found in {path}")
     return cases
 
 
-def parse_output(text: str) -> Any:
-    cleaned = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", text.strip(), flags=re.IGNORECASE)
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        return None
-
-
-ACTION_KEYS = {
-    "describe": {"type", "vars", "group"},
-    "compare": {"type", "outcome", "exposure", "paired"},
-    "regression": {"type", "outcome", "predictors", "model", "cluster", "offset"},
-    "survival": {"type", "time", "event", "group", "covariates"},
-    "forecast": {"type", "date", "value", "horizon"},
-    "check": {"type"}, "fix": {"type"}, "report": {"type"},
-    "open": {"type", "tool"},
-}
-OPEN_TOOLS = {"data", "describe", "compare", "regression", "survival", "forecast", "export", "question", "design", "sample", "test", "checklist"}
-REGRESSION_MODELS = {"auto", "linear", "logistic", "modpoisson", "poisson", "ordinal", "multinomial", "mixed"}
-
-
-def valid_action_item(item: Any) -> bool:
-    if not isinstance(item, dict) or not isinstance(item.get("type"), str):
-        return False
-    kind = item["type"]
-    if kind not in ACTION_KEYS:
-        return False
-    if set(item) != ACTION_KEYS[kind]:
-        return False
-    if kind == "describe":
-        return isinstance(item["vars"], list) and all(isinstance(v, str) for v in item["vars"]) and (item["group"] is None or isinstance(item["group"], str))
-    if kind == "compare":
-        return isinstance(item["outcome"], str) and isinstance(item["exposure"], str) and isinstance(item["paired"], bool)
-    if kind == "regression":
-        return (isinstance(item["outcome"], str) and isinstance(item["predictors"], list)
-                and all(isinstance(v, str) for v in item["predictors"])
-                and isinstance(item["model"], str) and item["model"] in REGRESSION_MODELS
-                and (item["cluster"] is None or isinstance(item["cluster"], str))
-                and ("offset" in item and (item["offset"] is None or (isinstance(item["offset"], str) and bool(item["offset"].strip()))))
-                and (item["offset"] is None or (item["model"] == "poisson" and item["offset"] != item["outcome"] and item["offset"] not in item["predictors"])))
-    if kind == "survival":
-        return (isinstance(item["time"], str) and isinstance(item["event"], str)
-                and (item["group"] is None or isinstance(item["group"], str))
-                and isinstance(item["covariates"], list)
-                and all(isinstance(v, str) for v in item["covariates"]))
-    if kind == "forecast":
-        return ((item["date"] is None or isinstance(item["date"], str))
-                and isinstance(item["value"], str) and isinstance(item["horizon"], int)
-                and not isinstance(item["horizon"], bool) and 1 <= item["horizon"] <= 120)
-    if kind == "open":
-        return isinstance(item["tool"], str) and item["tool"] in OPEN_TOOLS
-    return kind in {"check", "fix", "report"}
-
-
-def valid_action(action: Any) -> bool:
-    if action is None:
-        return True
-    items = action if isinstance(action, list) else [action]
-    return bool(items) and len(items) <= 4 and all(valid_action_item(item) for item in items)
-
-
-def action_types(action: Any) -> Any:
-    if action is None:
-        return None
-    if isinstance(action, list):
-        return [item.get("type") if isinstance(item, dict) else None for item in action]
-    return action.get("type") if isinstance(action, dict) else None
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", required=True, help="Local LoRA adapter directory")
-    parser.add_argument("--base-model", default="Qwen/Qwen3-4B-Instruct-2507")
-    parser.add_argument("--cases", type=Path, default=Path("data/eval.jsonl"))
-    parser.add_argument("--report", type=Path, default=Path("outputs/evaluation.json"))
-    parser.add_argument("--max-new-tokens", type=int, default=220)
-    parser.add_argument("--baseline-only", action="store_true", help="Evaluate the untouched base model for comparison")
-    parser.add_argument(
-        "--precision", choices=["4bit", "float16"], default="4bit",
-        help="GPU loading precision. 4bit matches QLoRA training and fits a T4; use the same value for base and fine-tuned runs.",
-    )
-    args = parser.parse_args()
-
-    cases = load_cases(args.cases)
-    tokenizer_source = args.base_model if args.baseline_only else args.model
+def load_model(args):
+    is_adapter = bool(args.model) and (Path(args.model) / "adapter_config.json").exists()
+    weights = args.base_model if (args.baseline_only or is_adapter or not args.model) else args.model
+    tokenizer_source = args.base_model if args.baseline_only or not args.model else args.model
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, use_fast=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"  # batched generation continues from the right edge
     load_mode = "cpu-float32"
-    model_kwargs: dict[str, Any] = {"torch_dtype": torch.float32}
+    kwargs: dict[str, Any] = {"torch_dtype": torch.float32}
     if torch.cuda.is_available():
         free, total = torch.cuda.mem_get_info()
         print(f"GPU memory free: {free / 2**30:.1f} of {total / 2**30:.1f} GiB")
-        # Keep every layer on the GPU. device_map="auto" silently offloads layers to
-        # the CPU when memory is short, which makes generation extremely slow and
-        # breaks adapter loading; fail clearly instead.
-        model_kwargs = {"device_map": {"": 0}}
+        # Keep every layer on the GPU; device_map="auto" would silently offload to the CPU.
+        kwargs = {"device_map": {"": 0}}
         if args.precision == "4bit":
             from transformers import BitsAndBytesConfig
-            model_kwargs["quantization_config"] = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_use_double_quant=True,
-                bnb_4bit_compute_dtype=torch.float16,
-            )
+            kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True,
+                bnb_4bit_compute_dtype=torch.float16)
             load_mode = "cuda-4bit-nf4"
         else:
-            model_kwargs["torch_dtype"] = torch.float16
+            kwargs["torch_dtype"] = torch.float16
             load_mode = "cuda-float16"
     try:
-        model = AutoModelForCausalLM.from_pretrained(args.base_model, **model_kwargs)
+        model = AutoModelForCausalLM.from_pretrained(weights, **kwargs)
     except torch.cuda.OutOfMemoryError as exc:
-        raise SystemExit(
-            "The model does not fit in free GPU memory. Run !nvidia-smi to see what is using the GPU, "
-            "or restart the runtime (Runtime > Restart session) and rerun from the top. "
-            "Use --precision 4bit if you were using float16."
-        ) from exc
-    print(f"Loaded {args.base_model} as {load_mode}")
-    if not args.baseline_only:
+        raise SystemExit("The model does not fit in free GPU memory. Run !nvidia-smi, restart the session "
+                         "(Runtime > Restart session) and rerun, or use --precision 4bit.") from exc
+    if is_adapter and not args.baseline_only:
+        from peft import PeftModel
         model = PeftModel.from_pretrained(model, args.model)
     model.eval()
+    kind = "untuned baseline" if args.baseline_only or not args.model else ("fine-tuned adapter" if is_adapter else "merged model")
+    print(f"Loaded {weights}{' + adapter ' + args.model if is_adapter and not args.baseline_only else ''} as {load_mode} ({kind})")
+    return model, tokenizer, load_mode, kind
 
-    rows = []
-    json_ok = schema_ok = action_ok = type_match = exact_match = 0
-    for case in cases:
-        messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": case["prompt"]},
-        ]
-        prompt_text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = tokenizer(prompt_text, return_tensors="pt")
-        if torch.cuda.is_available():
-            inputs = {key: value.to(model.device) for key, value in inputs.items()}
-        with torch.no_grad():
-            output = model.generate(
-                **inputs,
-                max_new_tokens=args.max_new_tokens,
-                do_sample=False,
-                pad_token_id=tokenizer.pad_token_id,
-            )
-        generated = tokenizer.decode(
-            output[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True
-        ).strip()
-        parsed = parse_output(generated)
-        if parsed is not None:
-            json_ok += 1
-        schema_valid = isinstance(parsed, dict) and set(parsed) == {"reply", "action"} and isinstance(parsed.get("reply"), str)
-        action_valid = schema_valid and valid_action(parsed.get("action"))
-        if schema_valid:
-            schema_ok += 1
-        expected_action = case["expected"].get("action")
-        predicted_action = parsed.get("action") if schema_valid else None
-        same_type = action_types(predicted_action) == action_types(expected_action)
-        same_action = predicted_action == expected_action
-        if action_valid:
-            action_ok += 1
-        if action_valid and same_type:
-            type_match += 1
-        if action_valid and same_action:
-            exact_match += 1
-        rows.append({
-            "prompt": case["prompt"],
-            "expected": case["expected"],
-            "generated_text": generated,
-            "parsed": parsed,
-            "valid_json": parsed is not None,
-            "valid_schema": schema_valid,
-            "valid_action": bool(action_valid),
-            "action_type_match": bool(action_valid and same_type),
-            "exact_action_match": bool(action_valid and same_action),
-        })
 
-    n = len(cases)
+def generate(model, tokenizer, prompts: list[str], max_new_tokens: int) -> list[str]:
+    batch = tokenizer(prompts, return_tensors="pt", padding=True, add_special_tokens=False)
+    if torch.cuda.is_available():
+        batch = {k: v.to(model.device) for k, v in batch.items()}
+    with torch.inference_mode():
+        out = model.generate(**batch, max_new_tokens=max_new_tokens, do_sample=False,
+                             pad_token_id=tokenizer.pad_token_id, eos_token_id=tokenizer.eos_token_id)
+    width = batch["input_ids"].shape[1]
+    return [tokenizer.decode(row[width:], skip_special_tokens=True).strip() for row in out]
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--model", default="", help="LoRA adapter directory or merged model directory")
+    parser.add_argument("--baseline-only", action="store_true", help="Evaluate the untouched base model")
+    parser.add_argument("--base-model", default=DEFAULT_BASE)
+    parser.add_argument("--cases", type=Path, default=ROOT / "data" / "v4" / "eval.jsonl")
+    parser.add_argument("--report", type=Path, default=ROOT / "outputs" / "evaluation.json")
+    parser.add_argument("--prompt-version", default=prompting.DEFAULT_PROMPT_VERSION, choices=sorted(prompting.SYSTEM_PROMPTS))
+    parser.add_argument("--knowledge-db", type=Path, default=ROOT / "knowledge.sqlite3")
+    parser.add_argument("--precision", choices=["4bit", "float16"], default="4bit",
+                        help="GPU loading precision; use the same value for every model you compare.")
+    parser.add_argument("--max-new-tokens", type=int, default=512)
+    parser.add_argument("--batch-size", type=int, default=4, help="Cases generated together; lower it if the GPU runs out of memory.")
+    parser.add_argument("--limit", type=int, default=0, help="Score a stratified subset of this many cases (0 = all).")
+    args = parser.parse_args()
+    if not args.model and not args.baseline_only:
+        parser.error("pass --model DIR or --baseline-only")
+
+    cases = load_cases(args.cases)
+    if args.limit:
+        cases = prompting.stratified_subset(cases, args.limit)
+    sections = prompting.initialise_knowledge(prompting.knowledge_sources(ROOT), args.knowledge_db)
+    model, tokenizer, load_mode, kind = load_model(args)
+    prompts = [tokenizer.apply_chat_template(prompting.messages_for_row(c, args.knowledge_db, args.prompt_version),
+                                             tokenize=False, add_generation_prompt=True) for c in cases]
+    # Shortest first keeps padding small inside each batch; results are restored to file order.
+    order = sorted(range(len(cases)), key=lambda i: len(prompts[i]))
+    outputs: list[str] = [""] * len(cases)
+    started = time.time()
+    for start in range(0, len(order), args.batch_size):
+        idx = order[start:start + args.batch_size]
+        for i, text in zip(idx, generate(model, tokenizer, [prompts[i] for i in idx], args.max_new_tokens)):
+            outputs[i] = text
+        done = min(start + args.batch_size, len(order))
+        print(f"  {done}/{len(order)} cases, {time.time() - started:.0f}s", flush=True)
+
+    scored = [scoring.score_case(c, o) for c, o in zip(cases, outputs)]
+    summary = scoring.summarise(cases, scored)
     report = {
         "evaluated_model": args.base_model if args.baseline_only else args.model,
-        "base_model": args.base_model,
-        "mode": "untuned baseline" if args.baseline_only else "fine-tuned adapter",
-        "load_mode": load_mode,
-        "cases": n,
-        "valid_json_rate": json_ok / n,
-        "valid_schema_rate": schema_ok / n,
-        # This rate now requires a complete, correctly typed action payload,
-        # not merely a recognised action name. Keep the legacy key for reports.
-        "supported_action_rate": action_ok / n,
-        "action_contract_valid_rate": action_ok / n,
-        "action_type_accuracy": type_match / n,
-        "exact_action_match_rate": exact_match / n,
-        "warning": "Starter cases are synthetic smoke tests, not evidence of research-grade performance.",
-        "results": rows,
+        "base_model": args.base_model, "mode": kind, "load_mode": load_mode, "prompt_version": args.prompt_version,
+        "cases_file": str(args.cases), "knowledge_sections": sections, **summary,
+        "warning": "Synthetic held-out cases rendered from QuantAI's real context. Strong scores show the model fits QuantAI's "
+                   "action contract on these scenarios; they are not evidence of expert-level research judgement.",
+        "results": [{"message": c.get("message", c.get("prompt")), "prompt": c.get("prompt", c.get("message")),
+                     "expected": json.loads(c["completion"]), **{k: v for k, v in s.items()}} for c, s in zip(cases, scored)],
     }
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(json.dumps({key: value for key, value in report.items() if key != "results"}, indent=2))
+    show = {k: v for k, v in report.items() if k not in {"results", "field_scores", "by_intent"}}
+    print(json.dumps(show, indent=2))
+    print("\nLenient match by intent:")
+    for intent, r in summary["by_intent"].items():
+        print(f"  {intent:22} {r['lenient_match']:6.1%}  (n={r['n']})")
 
 
 if __name__ == "__main__":
