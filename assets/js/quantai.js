@@ -2336,7 +2336,7 @@ const Codegen = (function () {
         o.push(cmt(lang, "VIF depends only on the predictors"), `quietly regress ${yv} ${rhs}`, `estat vif`);
         if (s.model === "poisson") o.push(`quietly poisson ${yv} ${rhs}${offsetOpt}`, `predict double _mu, n`, `generate double _pr = (${yv} - _mu)^2/_mu`, `quietly summarize _pr`, `display "Pearson chi2/df (dispersion) = " r(sum)/(e(N) - e(k))`);
         const vce = s.robust ? " vce(robust)" : "";
-        o.push(cmt(lang, s.offset ? `Poisson rate model with exposure offset ${s.offset}` : (s.robust ? "Robust SEs (Stata multiplies by n/(n-1) — results differ from the app only in the 3rd-4th decimal)" : "Final model"), `poisson ${yv} ${rhs}${offsetOpt}${offset ? " " : ","}irr${vce}`);
+        o.push(cmt(lang, s.offset ? `Poisson rate model with exposure offset ${s.offset}` : (s.robust ? "Robust SEs (Stata multiplies by n/(n-1) — results differ from the app only in the 3rd-4th decimal)" : "Final model")), `poisson ${yv} ${rhs}${offsetOpt}${offset ? " " : ","}irr${vce}`);
       }
       o.push(`restore`);
     } else if (lang === "python") {
