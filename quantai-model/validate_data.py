@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -62,6 +64,34 @@ def valid_action_payload(action: Any) -> bool:
     return bool(items) and len(items) <= 4 and all(valid_action_item(item) for item in items)
 
 
+def normalize_prompt(text: str) -> str:
+    """Reduce a prompt to its content so trivial rewording cannot hide leakage."""
+    text = text.casefold()
+    text = re.sub(r"\b(user request|request|context)\s*:", " ", text)
+    text = re.sub(r"[^a-z0-9_]+", " ", text)
+    return " ".join(text.split())
+
+
+def near_duplicates(train: list[dict[str, Any]], evaluation: list[dict[str, Any]], threshold: float) -> list[tuple[float, int, int]]:
+    """Return (similarity, eval_line, train_line) for eval prompts too close to a training prompt."""
+    train_norm = [normalize_prompt(row["prompt"]) for row in train]
+    hits = []
+    for e_index, row in enumerate(evaluation):
+        target = normalize_prompt(row["prompt"])
+        matcher = difflib.SequenceMatcher(None, "", target)  # b is cached; a varies per training row
+        best, best_index = 0.0, -1
+        for t_index, candidate in enumerate(train_norm):
+            matcher.set_seq1(candidate)
+            if matcher.real_quick_ratio() < threshold or matcher.quick_ratio() < threshold:
+                continue
+            ratio = matcher.ratio()
+            if ratio > best:
+                best, best_index = ratio, t_index
+        if best >= threshold:
+            hits.append((best, e_index + 1, best_index + 1))
+    return hits
+
+
 def read_rows(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
@@ -99,6 +129,10 @@ def main() -> None:
     parser.add_argument("--eval", type=Path, default=Path("data/eval.jsonl"))
     parser.add_argument("--min-train", type=int, default=20)
     parser.add_argument("--min-eval", type=int, default=10)
+    parser.add_argument(
+        "--max-similarity", type=float, default=0.9,
+        help="Fail when a normalized eval prompt is at least this similar to a training prompt (0-1).",
+    )
     args = parser.parse_args()
 
     if args.train.resolve() == args.eval.resolve():
@@ -115,6 +149,12 @@ def main() -> None:
         errors.append(f"evaluation examples: {len(evaluation)} (minimum {args.min_eval})")
     if overlap:
         errors.append(f"{len(overlap)} exact prompt(s) occur in both splits")
+    leaks = near_duplicates(train, evaluation, args.max_similarity)
+    for ratio, eval_line, train_line in leaks:
+        errors.append(
+            f"near-duplicate leakage: {args.eval} line {eval_line} is {ratio:.0%} similar to "
+            f"{args.train} line {train_line} after normalization"
+        )
     if errors:
         raise SystemExit("Validation failed:\n- " + "\n- ".join(errors))
 
@@ -122,6 +162,7 @@ def main() -> None:
     print(f"Held-out evaluation examples: {len(evaluation)}")
     print("JSON schema and supported action types: valid")
     print("Exact prompt overlap: none")
+    print(f"Near-duplicate eval/train prompts (similarity >= {args.max_similarity:.0%}): none")
     print("Note: structural checks do not establish example quality or model performance.")
 
 
