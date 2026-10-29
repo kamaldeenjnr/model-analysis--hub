@@ -174,3 +174,26 @@ def test_legacy_regression_action_gets_null_offset():
                    "model": "poisson", "cluster": None}
     }))
     assert parsed["action"]["offset"] is None
+
+
+def test_offset_cannot_be_an_outcome_or_predictor():
+    import json
+    cases = [
+        {"type": "regression", "outcome": "person_days", "predictors": ["age"],
+         "model": "poisson", "cluster": None, "offset": "person_days"},
+        {"type": "regression", "outcome": "visits", "predictors": ["person_days"],
+         "model": "poisson", "cluster": None, "offset": "person_days"},
+    ]
+    for action in cases:
+        parsed = module.validate_output(json.dumps({"reply": "Estimating a rate.", "action": action}))
+        assert parsed["action"] is None
+
+
+def test_empty_offset_name_is_rejected():
+    import json
+    parsed = module.validate_output(json.dumps({
+        "reply": "Estimating a rate.",
+        "action": {"type": "regression", "outcome": "visits", "predictors": ["age"],
+                   "model": "poisson", "cluster": None, "offset": " "}
+    }))
+    assert parsed["action"] is None
