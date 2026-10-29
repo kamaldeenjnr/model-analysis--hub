@@ -10,7 +10,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--adapter", type=Path, required=True, help="Trained PEFT adapter directory")
-    parser.add_argument("--base-model", default="Qwen/Qwen2.5-3B-Instruct")
+    parser.add_argument("--base-model", default="Qwen/Qwen3-4B-Instruct-2507")
     parser.add_argument("--output", type=Path, default=Path("outputs/quantai-merged-model"))
     args = parser.parse_args()
     if not (args.adapter / "adapter_config.json").exists():
