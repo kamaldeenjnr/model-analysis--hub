@@ -1,11 +1,17 @@
 """Offline unit tests for the response guard; no model download or GPU is needed."""
 import importlib.util
+import sys
 from pathlib import Path
 
 MODULE_PATH = Path(__file__).with_name("serve.py")
 SPEC = importlib.util.spec_from_file_location("quantai_serve", MODULE_PATH)
-module = importlib.util.module_from_spec(SPEC)
 assert SPEC and SPEC.loader
+module = importlib.util.module_from_spec(SPEC)
+# Register before executing, as a normal import does. serve.py uses postponed
+# annotations, so Pydantic resolves names such as `Any` through
+# sys.modules[ChatResponse.__module__]; without this entry ChatResponse stays
+# "not fully defined" and fails on first instantiation.
+sys.modules[SPEC.name] = module
 SPEC.loader.exec_module(module)
 
 
@@ -240,6 +246,9 @@ def test_chat_handler_returns_a_browser_compatible_offset_action(monkeypatch):
         context="Variables: visits, age, person_days",
     ))
     assert response.local_inference is True
+    assert response.reply == "I’ll estimate the rate using person-days as the offset."
+    assert response.model == module.MODEL_PATH.name
+    assert "person_days" not in response.action["predictors"]
     assert response.action == {
         "type": "regression",
         "outcome": "visits",
