@@ -81,3 +81,16 @@ def test_complete_compare_action_is_accepted():
         "action": {"type": "compare", "outcome": "outcome", "exposure": "exposure", "paired": False}
     }))
     assert parsed["action"]["paired"] is False
+
+
+
+def test_malformed_action_field_types_fail_closed():
+    import json
+    cases = [
+        {"type": [], "vars": [], "group": None},
+        {"type": "regression", "outcome": "y", "predictors": ["x"], "model": [], "cluster": None},
+        {"type": "open", "tool": []},
+    ]
+    for action in cases:
+        parsed = module.validate_output(json.dumps({"reply": "Try this.", "action": action}))
+        assert parsed["action"] is None
