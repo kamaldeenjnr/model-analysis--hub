@@ -495,3 +495,30 @@ body.qa-page { background: #fff; }
 .chips .chip { border: 1px solid #DDE3EA; background: #fff; color: var(--ink-2); border-radius: 999px; padding: .42rem .85rem; font: inherit; font-size: .86rem; cursor: pointer; text-align: left; transition: border-color .15s, color .15s, background .15s; }
 .chips .chip:hover { border-color: var(--navy); color: var(--navy); background: #F5F7FA; }
 .chips .chip.tool { color: var(--navy); font-weight: 600; }
+
+
+/* Simplified chat-first workspace */
+.qa-app2 { grid-template-columns: 252px minmax(0, 1fr); }
+.chat-empty { max-width: 760px; gap: 1.05rem; padding-top: clamp(1.25rem, 5vh, 3rem); }
+.chat-hello { gap: .8rem; }
+.chat-hello h1 { font-size: clamp(1.9rem, 4vw, 2.55rem); }
+.chat-hello p { max-width: 58ch; line-height: 1.65; }
+.start-actions { display: flex; align-items: center; justify-content: center; gap: .7rem; flex-wrap: wrap; margin-top: .15rem; }
+.start-actions > span { color: #6B788B; font-size: .78rem; }
+.start-upload { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 40px; padding: .55rem .95rem; border: 1px solid #0C203B; border-radius: 999px; background: #0C203B; color: #fff; font-size: .88rem; font-weight: 600; cursor: pointer; }
+.start-upload:hover { background: #1C3A63; }
+.start-upload svg { width: 17px; height: 17px; }
+.chat-empty .composer.big { margin-top: .15rem; box-shadow: 0 5px 24px -12px rgba(12,32,59,.3); }
+.chat-empty .suggest { margin-top: .1rem; gap: .55rem; }
+.chat-empty .suggest button { border-radius: 12px; padding: .75rem .9rem; min-height: 76px; }
+.chat-empty .suggest b { font-size: .9rem; }
+.chat-empty .suggest span { line-height: 1.4; }
+.chat-data { max-width: 58ch; line-height: 1.5; }
+@media (max-width: 900px) {
+  .qa-app2 { grid-template-columns: minmax(0, 1fr); }
+  .chat-empty { gap: .9rem; padding: 1.25rem .85rem 1.5rem; }
+  .chat-hello h1 { font-size: clamp(1.7rem, 7vw, 2.1rem); }
+  .start-actions { gap: .45rem; }
+  .chat-empty .suggest { grid-template-columns: minmax(0, 1fr); }
+  .chat-empty .suggest button { min-height: 0; padding: .7rem .85rem; }
+}
