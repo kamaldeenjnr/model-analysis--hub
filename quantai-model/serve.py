@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 ROOT = Path(__file__).resolve().parent
-MODEL_PATH = Path(os.environ.get("QUANTAI_MODEL_PATH", ROOT / "outputs" / "quantai-merged-model"))
+MODEL_PATH = Path(os.environ.get("QUANTAI_MODEL_PATH", ROOT / "outputs" / "quantai-merged-model-v2"))
 KNOWLEDGE_PATH = Path(os.environ.get("QUANTAI_KNOWLEDGE_PATH", ROOT / "KNOWLEDGE_BASE.md"))
 DB_PATH = Path(os.environ.get("QUANTAI_KNOWLEDGE_DB", ROOT / "knowledge.sqlite3"))
 MAX_INPUT_CHARS = int(os.environ.get("QUANTAI_MAX_INPUT_CHARS", "10000"))
