@@ -12,7 +12,7 @@ TOP_LEVEL = {"reply", "action"}
 ACTION_KEYS = {
     "describe": {"type", "vars", "group"},
     "compare": {"type", "outcome", "exposure", "paired"},
-    "regression": {"type", "outcome", "predictors", "model", "cluster"},
+    "regression": {"type", "outcome", "predictors", "model", "cluster", "offset"},
     "survival": {"type", "time", "event", "group", "covariates"},
     "forecast": {"type", "date", "value", "horizon"},
     "check": {"type"}, "fix": {"type"}, "report": {"type"},
@@ -38,7 +38,9 @@ def valid_action_item(item: Any) -> bool:
         return (isinstance(item["outcome"], str) and isinstance(item["predictors"], list)
                 and all(isinstance(v, str) for v in item["predictors"])
                 and isinstance(item["model"], str) and item["model"] in REGRESSION_MODELS
-                and (item["cluster"] is None or isinstance(item["cluster"], str)))
+                and (item["cluster"] is None or isinstance(item["cluster"], str))
+                and ("offset" in item and (item["offset"] is None or isinstance(item["offset"], str)))
+                and (item["offset"] is None or item["model"] == "poisson"))
     if kind == "survival":
         return (isinstance(item["time"], str) and isinstance(item["event"], str)
                 and (item["group"] is None or isinstance(item["group"], str))
