@@ -162,6 +162,16 @@ def main() -> None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
 
+    # Build and length-check the data before loading the model, so a problem shows up in seconds.
+    train_rows = prompting.stratified_subset(train_rows, args.max_train_rows)
+    eval_rows = prompting.stratified_subset(eval_rows, args.eval_limit)
+    print(f"Training rows: {len(train_rows)} of {n_train_file}; loss-monitoring rows: {len(eval_rows)} of {n_eval_file}")
+    sections = prompting.initialise_knowledge(prompting.knowledge_sources(ROOT), args.knowledge_db)
+    print(f"Knowledge index: {sections} sections; prompt version {args.prompt_version}")
+    train_ds = build_dataset(train_rows, tokenizer, args.max_length, args.knowledge_db, args.prompt_version)
+    eval_ds = build_dataset(eval_rows, tokenizer, args.max_length, args.knowledge_db, args.prompt_version)
+    write_manifest(args, len(train_rows), len(eval_rows))
+
     use_cuda = torch.cuda.is_available()
     quantized = False
     model_kwargs: dict[str, Any] = {}
@@ -176,7 +186,8 @@ def main() -> None:
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_compute_dtype=torch.float16,
             )
-            model_kwargs["device_map"] = "auto"
+            # Keep every layer on the GPU; "auto" can silently offload layers to the CPU.
+            model_kwargs["device_map"] = {"": 0}
             quantized = True
         except (ImportError, RuntimeError):
             model_kwargs["torch_dtype"] = torch.float16
@@ -197,14 +208,6 @@ def main() -> None:
     model = get_peft_model(model, lora)
     model.print_trainable_parameters()
 
-    train_rows = prompting.stratified_subset(train_rows, args.max_train_rows)
-    eval_rows = prompting.stratified_subset(eval_rows, args.eval_limit)
-    print(f"Training rows: {len(train_rows)} of {n_train_file}; loss-monitoring rows: {len(eval_rows)} of {n_eval_file}")
-    sections = prompting.initialise_knowledge(prompting.knowledge_sources(ROOT), args.knowledge_db)
-    print(f"Knowledge index: {sections} sections; prompt version {args.prompt_version}")
-    train_ds = build_dataset(train_rows, tokenizer, args.max_length, args.knowledge_db, args.prompt_version)
-    eval_ds = build_dataset(eval_rows, tokenizer, args.max_length, args.knowledge_db, args.prompt_version)
-    write_manifest(args, len(train_rows), len(eval_rows))
     args.output.mkdir(parents=True, exist_ok=True)
     training_args = TrainingArguments(
         output_dir=str(args.output),
