@@ -3817,10 +3817,10 @@ const _loadDatasetBase = loadDataset;
 loadDataset = function () { S.fc = { date: "", value: "", h: "", res: null, err: null }; return _loadDatasetBase.apply(this, arguments); };
 
 /* =====================================================================
-   AI assistant (website build): answers through the Model Analysis Hub
-   Cloudflare worker (Groq). Only statistical summaries and results are
-   sent — never the uploaded file. Every number still comes from the
-   deterministic engine; the assistant only explains.
+   AI assistant (website build): uses the existing Model Analysis Hub
+   worker by default, or the opt-in local QuantAI API when configured.
+   Only statistical summaries and results are sent — never the uploaded
+   file. Every number still comes from the deterministic engine.
    ===================================================================== */
 const AI_URL = "https://mah-assistant.kamalamadu8.workers.dev";
 const LOCAL_AI_URL = typeof window.QUANTAI_LOCAL_AI_URL === "string" ? window.QUANTAI_LOCAL_AI_URL.trim().replace(/\/+$/, "") : "";
@@ -3919,10 +3919,9 @@ document.addEventListener("click", e => {
 });
 
 /* =====================================================================
-   QuantAI Chat (website build): a conversation interface. The assistant
-   (Groq via the Model Analysis Hub worker) reads a summary of the data,
-   the analyses run and the methodology inputs, and can ask QuantAI to
-   run an analysis. QuantAI's engine computes every result shown.
+   QuantAI Chat (website build): the configured assistant reads a summary
+   of the data, the analyses run and the methodology inputs, and can ask
+   QuantAI to run an analysis. QuantAI's deterministic engine computes results.
    ===================================================================== */
 const CHAT_KEY = "chats";
 S.chats = (() => { const c = store.get(CHAT_KEY, []); return Array.isArray(c) ? c.slice(0, 30) : []; })();
