@@ -171,7 +171,7 @@ def valid_action_item(item: Any) -> bool:
                 and isinstance(item.get("value"), str) and isinstance(item.get("horizon"), int)
                 and not isinstance(item.get("horizon"), bool) and 1 <= item["horizon"] <= 120)
     if action_type == "open":
-        return item.get("tool") in OPEN_TOOLS
+        return isinstance(item.get("tool"), str) and item["tool"] in OPEN_TOOLS
     return action_type in {"check", "fix", "report"}
 
 
