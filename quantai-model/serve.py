@@ -179,8 +179,8 @@ def valid_action_item(item: Any) -> bool:
                 and all(isinstance(v, str) for v in item["predictors"])
                 and isinstance(item.get("model"), str) and item["model"] in REGRESSION_MODELS
                 and (item.get("cluster") is None or isinstance(item.get("cluster"), str))
-                and (item.get("offset") is None or isinstance(item.get("offset"), str))
-                and (item.get("offset") is None or item.get("model") == "poisson"))
+                and (item.get("offset") is None or (isinstance(item.get("offset"), str) and bool(item["offset"].strip())))
+                and (item.get("offset") is None or (item["model"] == "poisson" and item["offset"] != item["outcome"] and item["offset"] not in item["predictors"])))
     if action_type == "survival":
         return (isinstance(item.get("time"), str) and isinstance(item.get("event"), str)
                 and (item.get("group") is None or isinstance(item.get("group"), str))
