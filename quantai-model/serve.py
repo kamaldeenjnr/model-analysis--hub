@@ -175,6 +175,23 @@ def valid_action_item(item: Any) -> bool:
     return action_type in {"check", "fix", "report"}
 
 
+def normalise_action_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Apply safe, deterministic defaults before routing an otherwise valid action.
+
+    The describe tool uses ``vars`` as columns to summarise and ``group`` as the
+    stratifier. Include a non-null grouping variable in ``vars`` as well so the
+    browser engine has access to the column it must group by.
+    """
+    normalised = dict(item)
+    if (
+        normalised.get("type") == "describe"
+        and isinstance(normalised.get("vars"), list)
+        and isinstance(normalised.get("group"), str)
+        and normalised["group"] not in normalised["vars"]
+    ):
+        normalised["vars"] = [*normalised["vars"], normalised["group"]]
+    return normalised
+
 def validate_output(raw: str) -> dict[str, Any]:
     text = raw.strip()
     text = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", text, flags=re.IGNORECASE)
@@ -192,9 +209,11 @@ def validate_output(raw: str) -> dict[str, Any]:
     if action is not None:
         if not isinstance(action, (dict, list)) or not actions or len(actions) > 4:
             return {"reply": "I need to clarify the request before selecting a tool.", "action": None}
+        actions = [normalise_action_item(item) if isinstance(item, dict) else item for item in actions]
         for item in actions:
             if not valid_action_item(item):
                 return {"reply": "I need to clarify the request before selecting a valid supported tool.", "action": None}
+        action = actions if isinstance(action, list) else actions[0]
     return {"reply": parsed["reply"][:5000], "action": action}
 
 
