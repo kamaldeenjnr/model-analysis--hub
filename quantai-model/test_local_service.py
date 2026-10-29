@@ -35,3 +35,49 @@ def test_multiple_supported_actions_are_bounded():
     import json
     parsed = module.validate_output(json.dumps({"reply":"Working.","action":actions}))
     assert parsed["action"] is None
+
+
+
+def test_compare_requires_explicit_paired_boolean():
+    import json
+    missing = module.validate_output(json.dumps({
+        "reply": "Comparing groups.",
+        "action": {"type": "compare", "outcome": "outcome", "exposure": "exposure"}
+    }))
+    assert missing["action"] is None
+
+
+def test_regression_requires_model_and_cluster_keys():
+    import json
+    missing = module.validate_output(json.dumps({
+        "reply": "Fitting regression.",
+        "action": {"type": "regression", "outcome": "y", "predictors": ["x"], "cluster": None}
+    }))
+    assert missing["action"] is None
+
+
+def test_describe_requires_group_key_even_when_null():
+    import json
+    missing = module.validate_output(json.dumps({
+        "reply": "Describing variables.",
+        "action": {"type": "describe", "vars": ["age"]}
+    }))
+    assert missing["action"] is None
+
+
+def test_forecast_requires_date_key_even_when_null():
+    import json
+    missing = module.validate_output(json.dumps({
+        "reply": "Forecasting.",
+        "action": {"type": "forecast", "value": "cases", "horizon": 4}
+    }))
+    assert missing["action"] is None
+
+
+def test_complete_compare_action_is_accepted():
+    import json
+    parsed = module.validate_output(json.dumps({
+        "reply": "Comparing groups.",
+        "action": {"type": "compare", "outcome": "outcome", "exposure": "exposure", "paired": False}
+    }))
+    assert parsed["action"]["paired"] is False
