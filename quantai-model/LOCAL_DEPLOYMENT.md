@@ -25,7 +25,8 @@ pip install -r requirements.txt
 
 ## 2. Validate data
 ```bash
-python validate_data.py --train data/train.jsonl --eval data/eval.jsonl
+python validate_data.py --train data/v4/train.jsonl --eval data/v4/eval.jsonl
+python datagen/audit.py data/v4/train.jsonl data/v4/eval.jsonl
 pytest -q
 ```
 The starter fixtures are synthetic smoke tests only. Expand and review the dataset before a meaningful training run. Keep task families separated between training and held-out evaluation.
@@ -33,8 +34,9 @@ The starter fixtures are synthetic smoke tests only. Expand and review the datas
 ## 3. Train the adapter
 Run on a GPU notebook or machine after checking the base model's license and current model card:
 ```bash
-python train_lora.py --train data/train.jsonl --eval data/eval.jsonl --output outputs/quantai-qwen3-4b-lora-v3
+python train_lora.py --train data/v4/train.jsonl --eval data/v4/eval.jsonl --output outputs/quantai-qwen3-4b-lora-v4 --epochs 1 --max-train-rows 650 --resume
 ```
+(The v3 command used `data/train.jsonl` and `--output outputs/quantai-qwen3-4b-lora-v3`; see `README.md` for the evaluation commands.)
 The script uses the Qwen3 4B Instruct instruction base as a starting point. Training it does not mean the model was pretrained from scratch. The quality of the specialist depends heavily on reviewed data and evaluation.
 
 ## 4. Evaluate both candidates
@@ -61,7 +63,7 @@ Linux/macOS:
 export QUANTAI_MODEL_PATH="$PWD/outputs/quantai-merged-model-v3"
 uvicorn serve:app --host 127.0.0.1 --port 8000
 ```
-Check `http://127.0.0.1:8000/health`. Send a POST request to `/chat` with JSON fields `message`, optional `context`, and optional `history`. The knowledge base is indexed locally using SQLite full-text search. No API key is required for inference.
+Check `http://127.0.0.1:8000/health`; it reports the `prompt_version` in use. A model must be served with the prompt it was trained on: `export_model.py` records it in `quantai_prompt.json` inside the exported folder and `serve.py` reads it (models exported before v4 have no marker and get the v3 prompt). Override with `QUANTAI_PROMPT_VERSION=v3` or `v4` only if you know the model's training prompt. To serve v4 after evaluating it, set `QUANTAI_MODEL_PATH` to `outputs/quantai-merged-model-v4`. Send a POST request to `/chat` with JSON fields `message`, optional `context`, and optional `history`. The knowledge base is indexed locally using SQLite full-text search. No API key is required for inference.
 
 
 ## 7. Connect the existing browser app to this API (opt-in)
