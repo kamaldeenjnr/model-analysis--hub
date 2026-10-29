@@ -4287,6 +4287,7 @@ function chatResultCard(m) {
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]"); if (!el) return;
   const act = el.dataset.act;
+  if (act === "chat-upload") { e.preventDefault(); const fileInput = $("#qa-chat-file"); if (fileInput) fileInput.click(); }
   if (act === "chat-del") { e.preventDefault(); e.stopPropagation(); S.chats = S.chats.filter(x => x.id !== el.dataset.id); if (S.chatId === el.dataset.id) S.chatId = S.chats.length ? S.chats[0].id : null; saveChats(); render(); return; }
   if (act === "chat-new") { e.preventDefault(); newChat(); render(); const i = $("#qa-chat-input"); if (i) i.focus(); }
   if (act === "chat-pick") { e.preventDefault(); S.chatId = el.dataset.id; render(); }
@@ -4415,21 +4416,30 @@ function composerHTML(big) {
     </form>`;
 }
 const SUGGEST = () => S.isExample && /hypertension/i.test(S.dsSource) ? [
-  ["Compare blood pressure", "between men and women", "Compare systolic BP between men and women"],
-  ["Find risk factors", "for hypertension, as prevalence ratios", "Which factors are associated with hypertension? Use prevalence ratios."],
-  ["Survival analysis", "loss to follow-up by hypertension", "Is loss to follow-up higher among people with hypertension?"],
-  ["Plan a study", "design for salt intake and hypertension", "What study design fits a study of salt intake and hypertension?"],
-] : [["Describe my data", "a summary table of every variable", "Describe my data"], ["Find relationships", "with my main outcome", "Which variables are related to my main outcome?"], ["Choose a test", "for my research question", "Which test should I use for my research question?"], ["Report results", "in APA style", "How should I report these results?"]];
+  ["Explore the sample data", "Get a simple overview", "Describe my data"],
+  ["Compare two groups", "See whether results differ", "Compare systolic BP between men and women"],
+  ["Find possible risk factors", "Explore factors linked to hypertension", "Which factors are associated with hypertension?"],
+  ["Plan a study", "Get help with design and sample size", "What study design fits a study of salt intake and hypertension?"],
+] : [
+  ["Understand my data", "Get a clear summary and data-quality checks", "Describe my data"],
+  ["Choose a statistical test", "Tell QuantAI your research question", "Which statistical test should I use for my research question?"],
+  ["Find associated factors", "Explore relationships with your main outcome", "Which variables are related to my main outcome?"],
+  ["Plan my research", "Get help with study design and sample size", "Help me plan a research study"],
+];
 
 function renderChatMain() {
   const c = curChat(), msgs = c ? c.messages : [];
   if (!msgs.length && !S.chatBusy) {
     return `<div class="chat-empty">
-      <div class="chat-hello"><img src="assets/img/logo-mark.webp" alt="" width="44" height="44"><h1>What would you like to find out?</h1>
-        <p>Type your research topic or question, or attach your data with the clip. QuantAI runs the statistics, checks the assumptions and explains the results.</p></div>
+      <div class="chat-hello"><img src="assets/img/logo-mark.webp" alt="" width="44" height="44"><h1>What can we work on?</h1>
+        <p>Ask in plain English. QuantAI can help you plan a study, choose a statistical method, analyse your data and understand the results. You do not need to know which test to use first.</p></div>
+      <div class="start-actions">
+        <button type="button" class="start-upload" data-act="chat-upload">${ICON.clip}<span>Upload your data</span></button>
+        <span>CSV or Excel · your file stays in this browser</span>
+      </div>
       ${composerHTML(true)}
       <div class="suggest">${SUGGEST().map(([a, b, t]) => `<button type="button" data-act="chat-starter" data-text="${esc(t)}"><b>${esc(a)}</b><span>${esc(b)}</span></button>`).join("")}</div>
-      <p class="chat-data">Using <b>${esc(S.dsSource)}</b>. Attach your own CSV or Excel file with the clip, or from the sidebar.</p>
+      <p class="chat-data">${S.isExample ? "A sample hypertension dataset is ready to explore. Upload your own file whenever you want." : "Start by asking a question or uploading a CSV or Excel file."}</p>
     </div>`;
   }
   return `<div class="chat-thread" id="qa-thread" aria-live="polite">
