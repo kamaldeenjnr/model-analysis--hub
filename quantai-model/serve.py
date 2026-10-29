@@ -21,7 +21,19 @@ KNOWLEDGE_PATH = Path(os.environ.get("QUANTAI_KNOWLEDGE_PATH", ROOT / "KNOWLEDGE
 DB_PATH = Path(os.environ.get("QUANTAI_KNOWLEDGE_DB", ROOT / "knowledge.sqlite3"))
 MAX_INPUT_CHARS = int(os.environ.get("QUANTAI_MAX_INPUT_CHARS", "10000"))
 MAX_NEW_TOKENS = int(os.environ.get("QUANTAI_MAX_NEW_TOKENS", "500"))
-ALLOWED_ACTIONS = {"describe", "compare", "regression", "survival", "forecast", "check", "fix", "report", "open"}
+ACTION_FIELDS = {
+    "describe": {"type", "vars", "group"},
+    "compare": {"type", "outcome", "exposure", "paired"},
+    "regression": {"type", "outcome", "predictors", "model", "cluster"},
+    "survival": {"type", "time", "event", "group", "covariates"},
+    "forecast": {"type", "date", "value", "horizon"},
+    "check": {"type"},
+    "fix": {"type"},
+    "report": {"type"},
+    "open": {"type", "tool"},
+}
+OPEN_TOOLS = {"data", "describe", "compare", "regression", "survival", "forecast", "export", "question", "design", "sample", "test", "checklist"}
+REGRESSION_MODELS = {"auto", "linear", "logistic", "modpoisson", "poisson", "ordinal", "multinomial", "mixed"}
 SYSTEM_PROMPT = """You are QuantAI, a specialised research-methods and biostatistics assistant.
 You run locally as a self-hosted model. Answer with one JSON object containing exactly:
 {"reply":"clear useful answer","action":null}
@@ -109,6 +121,35 @@ def load_model() -> None:
     _model.eval()
 
 
+def valid_action_item(item: Any) -> bool:
+    if not isinstance(item, dict) or item.get("type") not in ACTION_FIELDS:
+        return False
+    action_type = item["type"]
+    if set(item) - ACTION_FIELDS[action_type]:
+        return False
+    if action_type == "describe":
+        return isinstance(item.get("vars"), list) and all(isinstance(v, str) for v in item["vars"]) and (item.get("group") is None or isinstance(item.get("group"), str))
+    if action_type == "compare":
+        return isinstance(item.get("outcome"), str) and isinstance(item.get("exposure"), str) and isinstance(item.get("paired"), bool)
+    if action_type == "regression":
+        return (isinstance(item.get("outcome"), str) and isinstance(item.get("predictors"), list)
+                and all(isinstance(v, str) for v in item["predictors"])
+                and item.get("model") in REGRESSION_MODELS
+                and (item.get("cluster") is None or isinstance(item.get("cluster"), str)))
+    if action_type == "survival":
+        return (isinstance(item.get("time"), str) and isinstance(item.get("event"), str)
+                and (item.get("group") is None or isinstance(item.get("group"), str))
+                and isinstance(item.get("covariates"), list)
+                and all(isinstance(v, str) for v in item["covariates"]))
+    if action_type == "forecast":
+        return ((item.get("date") is None or isinstance(item.get("date"), str))
+                and isinstance(item.get("value"), str) and isinstance(item.get("horizon"), int)
+                and not isinstance(item.get("horizon"), bool) and 1 <= item["horizon"] <= 120)
+    if action_type == "open":
+        return item.get("tool") in OPEN_TOOLS
+    return action_type in {"check", "fix", "report"}
+
+
 def validate_output(raw: str) -> dict[str, Any]:
     text = raw.strip()
     text = re.sub(r"^\s*```(?:json)?\s*|\s*```\s*$", "", text, flags=re.IGNORECASE)
@@ -127,8 +168,8 @@ def validate_output(raw: str) -> dict[str, Any]:
         if not isinstance(action, (dict, list)) or not actions or len(actions) > 4:
             return {"reply": "I need to clarify the request before selecting a tool.", "action": None}
         for item in actions:
-            if not isinstance(item, dict) or item.get("type") not in ALLOWED_ACTIONS:
-                return {"reply": "I need to clarify the request before selecting a supported tool.", "action": None}
+            if not valid_action_item(item):
+                return {"reply": "I need to clarify the request before selecting a valid supported tool.", "action": None}
     return {"reply": parsed["reply"][:5000], "action": action}
 
 
