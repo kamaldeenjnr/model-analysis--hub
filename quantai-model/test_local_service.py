@@ -197,3 +197,54 @@ def test_empty_offset_name_is_rejected():
                    "model": "poisson", "cluster": None, "offset": " "}
     }))
     assert parsed["action"] is None
+
+
+def test_chat_handler_returns_a_browser_compatible_offset_action(monkeypatch):
+    import json
+    import torch
+
+    class FakeTokenizer:
+        pad_token_id = 0
+        eos_token_id = 2
+
+        def apply_chat_template(self, messages, **kwargs):
+            return "mock prompt"
+
+        def __call__(self, prompt, **kwargs):
+            return {"input_ids": torch.tensor([[1, 2]])}
+
+        def decode(self, token_ids, **kwargs):
+            return json.dumps({
+                "reply": "I’ll estimate the rate using person-days as the offset.",
+                "action": {
+                    "type": "regression",
+                    "outcome": "visits",
+                    "predictors": ["age"],
+                    "model": "poisson",
+                    "cluster": None,
+                    "offset": "person_days",
+                },
+            })
+
+    class FakeModel:
+        device = "cpu"
+
+        def generate(self, **kwargs):
+            return torch.tensor([[1, 2, 3, 4]])
+
+    monkeypatch.setattr(module, "load_model", lambda: None)
+    monkeypatch.setattr(module, "_tokenizer", FakeTokenizer())
+    monkeypatch.setattr(module, "_model", FakeModel())
+    response = module.chat(module.ChatRequest(
+        message="Estimate the visit rate per person-day.",
+        context="Variables: visits, age, person_days",
+    ))
+    assert response.local_inference is True
+    assert response.action == {
+        "type": "regression",
+        "outcome": "visits",
+        "predictors": ["age"],
+        "model": "poisson",
+        "cluster": None,
+        "offset": "person_days",
+    }
