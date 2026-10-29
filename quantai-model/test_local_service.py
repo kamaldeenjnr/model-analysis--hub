@@ -148,3 +148,29 @@ def test_grouped_describe_normalises_actions_inside_action_list():
     }))
     assert parsed["action"][0]["vars"] == ["age", "asthma", "sex"]
     assert parsed["action"][1] == {"type": "check"}
+
+
+def test_regression_offset_must_be_explicit_and_poisson_only():
+    import json
+    valid = module.validate_output(json.dumps({
+        "reply": "Estimating a rate per person-day.",
+        "action": {"type": "regression", "outcome": "visits", "predictors": ["age"],
+                   "model": "poisson", "cluster": None, "offset": "person_days"}
+    }))
+    assert valid["action"]["offset"] == "person_days"
+    invalid = module.validate_output(json.dumps({
+        "reply": "Estimating odds.",
+        "action": {"type": "regression", "outcome": "died", "predictors": ["age"],
+                   "model": "logistic", "cluster": None, "offset": "person_days"}
+    }))
+    assert invalid["action"] is None
+
+
+def test_legacy_regression_action_gets_null_offset():
+    import json
+    parsed = module.validate_output(json.dumps({
+        "reply": "Fitting regression.",
+        "action": {"type": "regression", "outcome": "y", "predictors": ["x"],
+                   "model": "poisson", "cluster": None}
+    }))
+    assert parsed["action"]["offset"] is None
