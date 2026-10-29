@@ -94,3 +94,57 @@ def test_malformed_action_field_types_fail_closed():
     for action in cases:
         parsed = module.validate_output(json.dumps({"reply": "Try this.", "action": action}))
         assert parsed["action"] is None
+
+
+
+def test_grouped_describe_adds_group_variable_to_vars():
+    import json
+    parsed = module.validate_output(json.dumps({
+        "reply": "Summarising participants by sex.",
+        "action": {"type": "describe", "vars": ["age", "asthma"], "group": "sex"}
+    }))
+    assert parsed["action"] == {
+        "type": "describe",
+        "vars": ["age", "asthma", "sex"],
+        "group": "sex",
+    }
+
+
+def test_grouped_describe_does_not_duplicate_group_variable():
+    import json
+    parsed = module.validate_output(json.dumps({
+        "reply": "Summarising participants by sex.",
+        "action": {"type": "describe", "vars": ["age", "sex", "asthma"], "group": "sex"}
+    }))
+    assert parsed["action"]["vars"] == ["age", "sex", "asthma"]
+
+
+def test_grouped_describe_does_not_mutate_input():
+    import json
+    action = {"type": "describe", "vars": ["age", "asthma"], "group": "sex"}
+    original_vars = list(action["vars"])
+    parsed = module.validate_output(json.dumps({"reply": "Summarising.", "action": action}))
+    assert action["vars"] == original_vars
+    assert parsed["action"]["vars"] == ["age", "asthma", "sex"]
+
+
+def test_non_grouped_describe_is_unchanged():
+    import json
+    parsed = module.validate_output(json.dumps({
+        "reply": "Summarising variables.",
+        "action": {"type": "describe", "vars": ["age", "bmi"], "group": None}
+    }))
+    assert parsed["action"] == {"type": "describe", "vars": ["age", "bmi"], "group": None}
+
+
+def test_grouped_describe_normalises_actions_inside_action_list():
+    import json
+    parsed = module.validate_output(json.dumps({
+        "reply": "Preparing analysis.",
+        "action": [
+            {"type": "describe", "vars": ["age", "asthma"], "group": "sex"},
+            {"type": "check"},
+        ]
+    }))
+    assert parsed["action"][0]["vars"] == ["age", "asthma", "sex"]
+    assert parsed["action"][1] == {"type": "check"}
