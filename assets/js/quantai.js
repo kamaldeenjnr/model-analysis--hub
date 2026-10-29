@@ -2317,7 +2317,7 @@ const Codegen = (function () {
     const allVars = [yv, ...preds.map(v => isCat(v) ? catName(v) : v.name), ...(offset ? [offset.name] : [])];
     if (lang === "stata") {
       const rhs = preds.map(v => isCat(v) ? `i.${catName(v)}` : v.name).join(" ");
-      const offsetOpt = offset ? `, exposure(${offset.name})` : "";
+      const offsetOpt = offset ? `exposure(${offset.name}) ` : "";
       o.push(`preserve`);
       if (s.crude) {
         const cmd = s.model === "linear" ? "regress" : s.model === "logistic" ? "logistic" : "poisson";
@@ -2336,7 +2336,7 @@ const Codegen = (function () {
         o.push(cmt(lang, "VIF depends only on the predictors"), `quietly regress ${yv} ${rhs}`, `estat vif`);
         if (s.model === "poisson") o.push(`quietly poisson ${yv} ${rhs}`, `predict double _mu, n`, `generate double _pr = (${yv} - _mu)^2/_mu`, `quietly summarize _pr`, `display "Pearson chi2/df (dispersion) = " r(sum)/(e(N) - e(k))`);
         const vce = s.robust ? " vce(robust)" : "";
-        o.push(cmt(lang, s.offset ? `Poisson rate model with exposure offset ${s.offset}` : (s.robust ? "Robust SEs (Stata multiplies by n/(n-1) — results differ from the app only in the 3rd-4th decimal)" : "Final model"), `poisson ${yv} ${rhs}${offsetOpt}, irr${vce}`);
+        o.push(cmt(lang, s.offset ? `Poisson rate model with exposure offset ${s.offset}` : (s.robust ? "Robust SEs (Stata multiplies by n/(n-1) — results differ from the app only in the 3rd-4th decimal)" : "Final model"), `poisson ${yv} ${rhs}, ${offsetOpt}irr${vce}`);
       }
       o.push(`restore`);
     } else if (lang === "python") {
@@ -3823,18 +3823,34 @@ loadDataset = function () { S.fc = { date: "", value: "", h: "", res: null, err:
    deterministic engine; the assistant only explains.
    ===================================================================== */
 const AI_URL = "https://mah-assistant.kamalamadu8.workers.dev";
-const AI_PRIVACY = "Your question and a statistical summary (never your file) are sent to the Model Analysis Hub assistant. Numbers come from QuantAI's own calculations; the assistant only explains them, so check anything important.";
+const LOCAL_AI_URL = typeof window.QUANTAI_LOCAL_AI_URL === "string" ? window.QUANTAI_LOCAL_AI_URL.trim().replace(/\\/+$/, "") : "";
+const AI_PRIVACY = LOCAL_AI_URL ? "Your question and a statistical summary (never your file) are sent to the configured QuantAI local service. Numbers come from QuantAI's own calculations; check important results." : "Your question and a statistical summary (never your file) are sent to the Model Analysis Hub assistant. Numbers come from QuantAI's own calculations; the assistant only explains them, so check anything important.";
 S.explain = {};
 
 const aiErrText = code => ({ rate_limited: "You've asked a lot of questions in a short time. Wait a few minutes and try again.", busy: "The assistant is busy right now. Try again in a minute.", not_configured: "The assistant isn't set up yet.", network: "The assistant couldn't be reached. Check your connection; all other tools still work." })[code] || "The assistant couldn't answer right now. All other tools still work.";
 async function askAI(mode, context, messages) {
   let res;
   try {
-    res = await fetch(AI_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, context: context.slice(0, 11900), messages: messages.slice(-10).map(m => ({ role: m.role, content: m.content.slice(0, 590) })) }) });
+    if (LOCAL_AI_URL) {
+      const last = messages[messages.length - 1] || {};
+      res = await fetch(LOCAL_AI_URL + "/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: String(last.content || mode).slice(0, 9500),
+          context: String(context || "").slice(0, 9000),
+          history: messages.slice(0, -1).slice(-8).map(m => ({
+            role: m.role, content: String(m.content || "").slice(0, 1000)
+          }))
+        })
+      });
+    } else {
+      res = await fetch(AI_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, context: context.slice(0, 11900), messages: messages.slice(-10).map(m => ({ role: m.role, content: m.content.slice(0, 590) })) }) });
+    }
   } catch (e) { throw Object.assign(new Error("network"), { code: "network" }); }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.reply) throw Object.assign(new Error(data.error || "failed"), { code: data.error || "failed" });
-  return data.reply;
+  if (!res.ok || typeof data.reply !== "string" || !data.reply) throw Object.assign(new Error(data.detail || data.error || "failed"), { code: data.error || "failed" });
+  return LOCAL_AI_URL ? JSON.stringify({ reply: data.reply, action: data.action ?? null }) : data.reply;
 }
 /** Minimal, safe formatting: escape, then **bold**, paragraphs and simple list lines. */
 function aiFormat(text) {
