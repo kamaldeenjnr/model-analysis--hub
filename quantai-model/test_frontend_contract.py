@@ -32,3 +32,10 @@ def test_offset_is_included_in_exported_poisson_code():
     assert "exposure(${offset.name})" in SOURCE
     assert "offset(log(${offset.name}))" in SOURCE
     assert "offset=np.log(" in SOURCE
+
+
+def test_explain_button_parses_local_model_json():
+    # With a local model, askAI returns {"reply", "action"} JSON; the explanation must show only the reply.
+    # End-to-end check in a real browser: node e2e_local_ai.js
+    assert 'st.text = parseAgent(await askAI("data", dataContext(resultContext(en.result))' in SOURCE
+    assert SOURCE.count('e.target.closest("[data-act]")') >= 2

@@ -3907,7 +3907,9 @@ async function explainResult(id) {
   const st = S.explain[id] = { busy: true };
   render();
   try {
-    st.text = await askAI("data", dataContext(resultContext(en.result)), [{ role: "user", content: "Explain the RESULT TO EXPLAIN in plain language for a student writing a thesis: what was tested and why this method was chosen (from the rules), what the result means in practice, and two cautions. Use only the numbers given. 120 to 200 words." }]);
+    // parseAgent accepts plain text (hosted assistant) and {reply, action} JSON (local model); an
+    // action returned while explaining is ignored.
+    st.text = parseAgent(await askAI("data", dataContext(resultContext(en.result)), [{ role: "user", content: "Explain the RESULT TO EXPLAIN in plain language for a student writing a thesis: what was tested and why this method was chosen (from the rules), what the result means in practice, and two cautions. Use only the numbers given. 120 to 200 words." }])).reply;
   } catch (e) { st.err = aiErrText(e.code); }
   st.busy = false; render();
 }
