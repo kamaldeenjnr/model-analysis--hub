@@ -35,7 +35,7 @@ Run on a GPU notebook or machine after checking the base model's license and cur
 ```bash
 python train_lora.py --train data/train.jsonl --eval data/eval.jsonl --output outputs/quantai-qwen25-3b-lora
 ```
-The script uses the Qwen2.5 3B instruction base as a starting point. Training it does not mean the model was pretrained from scratch. The quality of the specialist depends heavily on reviewed data and evaluation.
+The script uses the Qwen3 4B Instruct instruction base as a starting point. Training it does not mean the model was pretrained from scratch. The quality of the specialist depends heavily on reviewed data and evaluation.
 
 ## 4. Evaluate both candidates
 ```bash
