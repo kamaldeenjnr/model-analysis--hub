@@ -143,9 +143,11 @@ def load_model() -> None:
 
 
 def valid_action_item(item: Any) -> bool:
-    if not isinstance(item, dict) or item.get("type") not in ACTION_FIELDS:
+    if not isinstance(item, dict) or not isinstance(item.get("type"), str):
         return False
     action_type = item["type"]
+    if action_type not in ACTION_FIELDS:
+        return False
     # Every action has an exact contract: required keys cannot be omitted and
     # unrecognised keys cannot be passed to the deterministic engine.
     if set(item) != ACTION_FIELDS[action_type]:
@@ -157,7 +159,7 @@ def valid_action_item(item: Any) -> bool:
     if action_type == "regression":
         return (isinstance(item.get("outcome"), str) and isinstance(item.get("predictors"), list)
                 and all(isinstance(v, str) for v in item["predictors"])
-                and item.get("model") in REGRESSION_MODELS
+                and isinstance(item.get("model"), str) and item["model"] in REGRESSION_MODELS
                 and (item.get("cluster") is None or isinstance(item.get("cluster"), str)))
     if action_type == "survival":
         return (isinstance(item.get("time"), str) and isinstance(item.get("event"), str)
