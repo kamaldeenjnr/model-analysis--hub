@@ -90,8 +90,8 @@ def valid_action_item(item: Any) -> bool:
                 and all(isinstance(v, str) for v in item["predictors"])
                 and isinstance(item["model"], str) and item["model"] in REGRESSION_MODELS
                 and (item["cluster"] is None or isinstance(item["cluster"], str))
-                and ("offset" in item and (item["offset"] is None or isinstance(item["offset"], str)))
-                and (item["offset"] is None or item["model"] == "poisson"))
+                and ("offset" in item and (item["offset"] is None or (isinstance(item["offset"], str) and bool(item["offset"].strip()))))
+                and (item["offset"] is None or (item["model"] == "poisson" and item["offset"] != item["outcome"] and item["offset"] not in item["predictors"])))
     if kind == "survival":
         return (isinstance(item["time"], str) and isinstance(item["event"], str)
                 and (item["group"] is None or isinstance(item["group"], str))
