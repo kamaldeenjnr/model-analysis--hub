@@ -63,5 +63,30 @@ uvicorn serve:app --host 127.0.0.1 --port 8000
 ```
 Check `http://127.0.0.1:8000/health`. Send a POST request to `/chat` with JSON fields `message`, optional `context`, and optional `history`. The knowledge base is indexed locally using SQLite full-text search. No API key is required for inference.
 
-## 7. Before public hosting
+
+## 7. Connect the existing browser app to this API (opt-in)
+
+The website continues to use its existing assistant unless you explicitly configure the local endpoint. Before changing the production site, test this on a staging copy.
+
+1. Start the service and confirm `http://127.0.0.1:8000/health` reports that the model directory exists. The first chat request loads model weights and can take time.
+2. Configure CORS to allow the exact origin serving your website. For example, in PowerShell before starting Uvicorn:
+   ```powershell
+   $env:QUANTAI_CORS_ORIGINS = "http://localhost:5173"
+   uvicorn serve:app --host 127.0.0.1 --port 8000
+   ```
+   For a hosted site, use its exact HTTPS origin instead of the localhost example. Do not use `*` for a public deployment. A locally running service on one person's computer is not reachable by visitors to a public website.
+3. In the HTML page, set the API base URL **before** loading `assets/js/quantai.js`:
+   ```html
+   <script>window.QUANTAI_LOCAL_AI_URL = "https://your-secured-api.example.com";</script>
+   <script src="assets/js/quantai.js"></script>
+   ```
+   Set the base URL only; the browser client adds `/chat`. The API must use HTTPS when the website uses HTTPS. Do not place API secrets in browser JavaScript.
+4. Verify the browser's Network panel shows a POST to `/chat`, the response includes `reply` and `action`, and the browser runs any returned action through the deterministic engine. If the local endpoint is not configured, the existing worker path remains unchanged.
+
+### Count-rate regression offsets
+
+For Poisson rate models, `offset` must name a positive numeric exposure variable such as `patient_days` or `person_years`. It is not an ordinary predictor. QuantAI uses `log(exposure)` as a fixed offset and rejects rows with non-positive exposure values. The exported Stata, Python and R model code should include the same offset. Check the generated code and compare results against a trusted statistical package before research use.
+
+## 8. Before public hosting
+
 Add authentication, HTTPS, request quotas, concurrency limits, monitoring and a spending cap for infrastructure. Bind to 127.0.0.1 for local-only use. Do not expose a local development server directly to the internet. For public use, deploy behind a reverse proxy on a secured host. Configure the website to call your own backend only after browser integration and security review. Never send raw uploaded files or patient-level data unless there is an approved and explicitly disclosed reason.
