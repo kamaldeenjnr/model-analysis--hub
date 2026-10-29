@@ -9,6 +9,7 @@ on:
   pull_request:
     paths:
       - "quantai-model/**"
+      - "assets/js/quantai.js"
       - ".github/workflows/quantai-local-model-tests.yml"
 
 jobs:
