@@ -2317,11 +2317,11 @@ const Codegen = (function () {
     const allVars = [yv, ...preds.map(v => isCat(v) ? catName(v) : v.name), ...(offset ? [offset.name] : [])];
     if (lang === "stata") {
       const rhs = preds.map(v => isCat(v) ? `i.${catName(v)}` : v.name).join(" ");
-      const offsetOpt = offset ? `exposure(${offset.name}) ` : "";
+      const offsetOpt = offset ? `, exposure(${offset.name})` : "";
       o.push(`preserve`);
       if (s.crude) {
         const cmd = s.model === "linear" ? "regress" : s.model === "logistic" ? "logistic" : "poisson";
-        const opt = s.model === "linear" ? (s.robust ? ", vce(robust)" : "") : s.model === "logistic" ? "" : `, irr${s.robust ? " vce(robust)" : ""}`;
+        const opt = s.model === "linear" ? (s.robust ? ", vce(robust)" : "") : s.model === "logistic" ? "" : `, ${offset ? `exposure(${offset.name}) ` : ""}irr${s.robust ? " vce(robust)" : ""}`;
         o.push(cmt(lang, "Crude (unadjusted) estimates, each on all rows with that predictor and the outcome"), ...preds.map(v => `${cmd} ${yv} ${isCat(v) ? "i." + catName(v) : v.name}${opt}`));
       }
       o.push(cmt(lang, "Complete cases for the full model"), `keep if !missing(${allVars.join(", ")})`);
@@ -2334,9 +2334,9 @@ const Codegen = (function () {
         o.push(cmt(lang, "Adjusted odds ratios"), `logistic ${yv} ${rhs}`, `estat gof, group(10) table   // Hosmer-Lemeshow (Stata's grouping of ties can differ slightly)`, `lroc, nograph`);
       } else {
         o.push(cmt(lang, "VIF depends only on the predictors"), `quietly regress ${yv} ${rhs}`, `estat vif`);
-        if (s.model === "poisson") o.push(`quietly poisson ${yv} ${rhs}`, `predict double _mu, n`, `generate double _pr = (${yv} - _mu)^2/_mu`, `quietly summarize _pr`, `display "Pearson chi2/df (dispersion) = " r(sum)/(e(N) - e(k))`);
+        if (s.model === "poisson") o.push(`quietly poisson ${yv} ${rhs}${offsetOpt}`, `predict double _mu, n`, `generate double _pr = (${yv} - _mu)^2/_mu`, `quietly summarize _pr`, `display "Pearson chi2/df (dispersion) = " r(sum)/(e(N) - e(k))`);
         const vce = s.robust ? " vce(robust)" : "";
-        o.push(cmt(lang, s.offset ? `Poisson rate model with exposure offset ${s.offset}` : (s.robust ? "Robust SEs (Stata multiplies by n/(n-1) — results differ from the app only in the 3rd-4th decimal)" : "Final model"), `poisson ${yv} ${rhs}, ${offsetOpt}irr${vce}`);
+        o.push(cmt(lang, s.offset ? `Poisson rate model with exposure offset ${s.offset}` : (s.robust ? "Robust SEs (Stata multiplies by n/(n-1) — results differ from the app only in the 3rd-4th decimal)" : "Final model"), `poisson ${yv} ${rhs}${offsetOpt}${offset ? " " : ","}irr${vce}`);
       }
       o.push(`restore`);
     } else if (lang === "python") {
@@ -2356,7 +2356,7 @@ const Codegen = (function () {
       }
       if (s.crude) {
         o.push("# Crude (unadjusted) estimates, one predictor at a time, on all rows with that predictor and the outcome");
-        preds.forEach(v => { const vn = isCat(v) ? catName(v) : v.name, t = isCat(v) ? `C(${vn})` : vn, dd = `df[[${qJ(yv)}, ${qJ(vn)}]].dropna()`; o.push(s.model === "linear" ? `print(${fitExpr(t, dd)}.summary().tables[1])` : `m = ${fitExpr(t, dd)}; print(pd.DataFrame({"ratio": np.exp(m.params), "lo": np.exp(m.conf_int()[0]), "hi": np.exp(m.conf_int()[1]), "p": m.pvalues}).round(4))`); });
+        preds.forEach(v => { const vn = isCat(v) ? catName(v) : v.name, t = isCat(v) ? `C(${vn})` : vn, dd = `df[[${[yv, vn, ...(offset ? [offset.name] : [])].map(qJ).join(", ")}]].dropna()`; o.push(s.model === "linear" ? `print(${fitExpr(t, dd)}.summary().tables[1])` : `m = ${fitExpr(t, dd)}; print(pd.DataFrame({"ratio": np.exp(m.params), "lo": np.exp(m.conf_int()[0]), "hi": np.exp(m.conf_int()[1]), "p": m.pvalues}).round(4))`); });
       }
       o.push(`# Final model: ${name}`, `model = ${fitExpr(rhs)}`, `print(model.summary())`);
       if (s.model !== "linear") o.push(`print(pd.DataFrame({"${({ logistic: "OR", poisson: "IRR", modpoisson: "PR" })[s.model]}": np.exp(model.params), "2.5%": np.exp(model.conf_int()[0]), "97.5%": np.exp(model.conf_int()[1]), "p": model.pvalues}).round(4))`);
@@ -2381,7 +2381,7 @@ const Codegen = (function () {
       } else {
         const fam = s.model === "logistic" ? "binomial" : "poisson";
         o.push(`ratio_table <- function(fit, robust = FALSE) { b <- coef(fit); V <- vcov(fit); if (robust) { X <- model.matrix(fit); V <- V %*% crossprod(X * (fit$y - fitted(fit))) %*% V }; se <- sqrt(diag(V)); round(cbind(ratio = exp(b), lo = exp(b - 1.959964*se), hi = exp(b + 1.959964*se), p = 2*pnorm(-abs(b/se))), 4) }`);
-        if (s.crude) o.push("# Crude ratios (all rows with that predictor and the outcome)", ...preds.map(v => { const vn = isCat(v) ? catName(v) : v.name; return `ratio_table(glm(${yv} ~ ${vn}, family = ${fam}, data = na.omit(dat[, c("${yv}", "${vn}")])), robust = ${s.robust ? "TRUE" : "FALSE"})`; }));
+        if (s.crude) o.push("# Crude ratios (all rows with that predictor and the outcome)", ...preds.map(v => { const vn = isCat(v) ? catName(v) : v.name; const cols = [yv, vn, ...(offset ? [offset.name] : [])].map(qJ).join(", "); const crudeRhs = offset ? `${vn} + offset(log(${offset.name}))` : vn; return `ratio_table(glm(${yv} ~ ${crudeRhs}, family = ${fam}, data = na.omit(dat[, c(${cols})])), robust = ${s.robust ? "TRUE" : "FALSE"})`; }));
         o.push(`# Final model: ${name}`, `fit <- glm(${yv} ~ ${formulaRhs}, family = ${fam}, data = d)`, `summary(fit)`, `ratio_table(fit, robust = ${s.robust ? "TRUE" : "FALSE"})  # Wald CIs${s.robust ? ", robust (HC0) SEs" : ""}`);
         if (s.model === "poisson") o.push(`cat("Pearson chi2/df (dispersion) =", round(sum(residuals(fit, type = "pearson")^2) / df.residual(fit), 2), "\\n")`);
         if (s.model === "logistic") o.push(`# Hosmer-Lemeshow (same grouping as ResourceSelection::hoslem.test, g = 10)`,
@@ -3823,7 +3823,7 @@ loadDataset = function () { S.fc = { date: "", value: "", h: "", res: null, err:
    deterministic engine; the assistant only explains.
    ===================================================================== */
 const AI_URL = "https://mah-assistant.kamalamadu8.workers.dev";
-const LOCAL_AI_URL = typeof window.QUANTAI_LOCAL_AI_URL === "string" ? window.QUANTAI_LOCAL_AI_URL.trim().replace(/\\/+$/, "") : "";
+const LOCAL_AI_URL = typeof window.QUANTAI_LOCAL_AI_URL === "string" ? window.QUANTAI_LOCAL_AI_URL.trim().replace(/\/+$/, "") : "";
 const AI_PRIVACY = LOCAL_AI_URL ? "Your question and a statistical summary (never your file) are sent to the configured QuantAI local service. Numbers come from QuantAI's own calculations; check important results." : "Your question and a statistical summary (never your file) are sent to the Model Analysis Hub assistant. Numbers come from QuantAI's own calculations; the assistant only explains them, so check anything important.";
 S.explain = {};
 
