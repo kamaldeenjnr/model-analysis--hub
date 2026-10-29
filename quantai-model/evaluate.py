@@ -129,6 +129,10 @@ def main() -> None:
     parser.add_argument("--report", type=Path, default=Path("outputs/evaluation.json"))
     parser.add_argument("--max-new-tokens", type=int, default=220)
     parser.add_argument("--baseline-only", action="store_true", help="Evaluate the untouched base model for comparison")
+    parser.add_argument(
+        "--precision", choices=["4bit", "float16"], default="4bit",
+        help="GPU loading precision. 4bit matches QLoRA training and fits a T4; use the same value for base and fine-tuned runs.",
+    )
     args = parser.parse_args()
 
     cases = load_cases(args.cases)
@@ -136,11 +140,36 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, use_fast=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    model = AutoModelForCausalLM.from_pretrained(
-        args.base_model,
-        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
-        device_map="auto" if torch.cuda.is_available() else None,
-    )
+    load_mode = "cpu-float32"
+    model_kwargs: dict[str, Any] = {"torch_dtype": torch.float32}
+    if torch.cuda.is_available():
+        free, total = torch.cuda.mem_get_info()
+        print(f"GPU memory free: {free / 2**30:.1f} of {total / 2**30:.1f} GiB")
+        # Keep every layer on the GPU. device_map="auto" silently offloads layers to
+        # the CPU when memory is short, which makes generation extremely slow and
+        # breaks adapter loading; fail clearly instead.
+        model_kwargs = {"device_map": {"": 0}}
+        if args.precision == "4bit":
+            from transformers import BitsAndBytesConfig
+            model_kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
+                bnb_4bit_compute_dtype=torch.float16,
+            )
+            load_mode = "cuda-4bit-nf4"
+        else:
+            model_kwargs["torch_dtype"] = torch.float16
+            load_mode = "cuda-float16"
+    try:
+        model = AutoModelForCausalLM.from_pretrained(args.base_model, **model_kwargs)
+    except torch.cuda.OutOfMemoryError as exc:
+        raise SystemExit(
+            "The model does not fit in free GPU memory. Run !nvidia-smi to see what is using the GPU, "
+            "or restart the runtime (Runtime > Restart session) and rerun from the top. "
+            "Use --precision 4bit if you were using float16."
+        ) from exc
+    print(f"Loaded {args.base_model} as {load_mode}")
     if not args.baseline_only:
         model = PeftModel.from_pretrained(model, args.model)
     model.eval()
@@ -200,6 +229,7 @@ def main() -> None:
         "evaluated_model": args.base_model if args.baseline_only else args.model,
         "base_model": args.base_model,
         "mode": "untuned baseline" if args.baseline_only else "fine-tuned adapter",
+        "load_mode": load_mode,
         "cases": n,
         "valid_json_rate": json_ok / n,
         "valid_schema_rate": schema_ok / n,
