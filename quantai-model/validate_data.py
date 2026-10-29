@@ -9,6 +9,53 @@ from typing import Any
 
 SUPPORTED = {"describe", "compare", "regression", "survival", "forecast", "check", "fix", "report", "open"}
 TOP_LEVEL = {"reply", "action"}
+ACTION_KEYS = {
+    "describe": {"type", "vars", "group"},
+    "compare": {"type", "outcome", "exposure", "paired"},
+    "regression": {"type", "outcome", "predictors", "model", "cluster"},
+    "survival": {"type", "time", "event", "group", "covariates"},
+    "forecast": {"type", "date", "value", "horizon"},
+    "check": {"type"}, "fix": {"type"}, "report": {"type"},
+    "open": {"type", "tool"},
+}
+OPEN_TOOLS = {"data", "describe", "compare", "regression", "survival", "forecast", "export", "question", "design", "sample", "test", "checklist"}
+REGRESSION_MODELS = {"auto", "linear", "logistic", "modpoisson", "poisson", "ordinal", "multinomial", "mixed"}
+
+
+def valid_action_item(item: Any) -> bool:
+    if not isinstance(item, dict) or item.get("type") not in ACTION_KEYS:
+        return False
+    kind = item["type"]
+    if set(item) != ACTION_KEYS[kind]:
+        return False
+    if kind == "describe":
+        return isinstance(item["vars"], list) and all(isinstance(v, str) for v in item["vars"]) and (item["group"] is None or isinstance(item["group"], str))
+    if kind == "compare":
+        return isinstance(item["outcome"], str) and isinstance(item["exposure"], str) and isinstance(item["paired"], bool)
+    if kind == "regression":
+        return (isinstance(item["outcome"], str) and isinstance(item["predictors"], list)
+                and all(isinstance(v, str) for v in item["predictors"])
+                and item["model"] in REGRESSION_MODELS
+                and (item["cluster"] is None or isinstance(item["cluster"], str)))
+    if kind == "survival":
+        return (isinstance(item["time"], str) and isinstance(item["event"], str)
+                and (item["group"] is None or isinstance(item["group"], str))
+                and isinstance(item["covariates"], list)
+                and all(isinstance(v, str) for v in item["covariates"]))
+    if kind == "forecast":
+        return ((item["date"] is None or isinstance(item["date"], str))
+                and isinstance(item["value"], str) and isinstance(item["horizon"], int)
+                and not isinstance(item["horizon"], bool) and 1 <= item["horizon"] <= 120)
+    if kind == "open":
+        return item["tool"] in OPEN_TOOLS
+    return kind in {"check", "fix", "report"}
+
+
+def valid_action_payload(action: Any) -> bool:
+    if action is None:
+        return True
+    items = action if isinstance(action, list) else [action]
+    return bool(items) and len(items) <= 4 and all(valid_action_item(item) for item in items)
 
 
 def read_rows(path: Path) -> list[dict[str, Any]]:
@@ -31,14 +78,11 @@ def read_rows(path: Path) -> list[dict[str, Any]]:
         if not isinstance(result, dict) or set(result) != TOP_LEVEL or not isinstance(result.get("reply"), str):
             raise ValueError(f"{path}:{number}: expected exactly the keys reply and action")
         action = result["action"]
-        actions = action if isinstance(action, list) else [action]
-        if action is not None and not isinstance(action, (dict, list)):
-            raise ValueError(f"{path}:{number}: action must be an object, a list of objects, or null")
-        for index, item in enumerate(actions):
-            if item is None and action is None:
-                continue
-            if not isinstance(item, dict) or item.get("type") not in SUPPORTED:
-                raise ValueError(f"{path}:{number}: action {index + 1} has an unsupported action type")
+        if not valid_action_payload(action):
+            raise ValueError(
+                f"{path}:{number}: action payload is incomplete, has invalid field types, "
+                "contains unsupported fields, or uses an unsupported action"
+            )
         rows.append(row)
     if not rows:
         raise ValueError(f"{path}: no examples found")
