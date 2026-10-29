@@ -199,7 +199,10 @@ def main() -> None:
         "cases": n,
         "valid_json_rate": json_ok / n,
         "valid_schema_rate": schema_ok / n,
+        # This rate now requires a complete, correctly typed action payload,
+        # not merely a recognised action name. Keep the legacy key for reports.
         "supported_action_rate": action_ok / n,
+        "action_contract_valid_rate": action_ok / n,
         "action_type_accuracy": type_match / n,
         "exact_action_match_rate": exact_match / n,
         "warning": "Starter cases are synthetic smoke tests, not evidence of research-grade performance.",
