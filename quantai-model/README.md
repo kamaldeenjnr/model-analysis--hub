@@ -73,3 +73,15 @@ The starter examples are synthetic. For future training, use only data that can 
 ## Integration status
 
 The current QuantAI app and Cloudflare Worker remain the source of truth. This foundation is deliberately separate until a candidate model has been trained, evaluated, hosted, and explicitly configured. The existing provider-backed assistant remains available as a fallback; the browser's statistics engine must remain deterministic.
+
+## Local specialist model (no per-request LLM API)
+
+The local inference path and training notebook are now available in this branch:
+
+- [Colab training notebook](QuantAI_Training.ipynb): validate data, fine-tune, compare against the untouched base, and export a standalone model.
+- [Local deployment guide](LOCAL_DEPLOYMENT.md): run the merged model behind a local FastAPI endpoint.
+- [Local service](serve.py): inference runs from local weights, uses a local SQLite knowledge index, and does not call a third-party chat API.
+- [Local response-guard tests](test_local_service.py): smoke tests for malformed JSON and unsupported actions.
+- [Knowledge base](KNOWLEDGE_BASE.md): research methods, test selection, interpretation and Ghana public-health context.
+
+This removes per-request model API tokens when the service runs on your own machine or server. It does not remove hardware, storage, electricity or hosting costs. The current 66 training and 31 evaluation examples are a pipeline-development dataset, not enough to claim expert-level or production-grade performance. Review and expand the corpus and benchmark before public release. No model has been trained in this repository session yet.
