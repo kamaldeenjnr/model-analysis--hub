@@ -10,7 +10,7 @@ This directory is a reproducible starting point, not a claim that a trained mode
 
 1. **Browser (GitHub Pages):** reads CSV/Excel locally and computes analyses using the existing deterministic QuantAI engine.
 2. **Cloudflare Worker:** validates requests, keeps provider credentials server-side, sends only the existing summary/context and conversation to the assistant, and validates/falls back between providers.
-3. **QuantAI specialist model:** a small instruction model fine-tuned with LoRA on research-methods questions and structured action-routing examples. Initial base: `Qwen/Qwen2.5-3B-Instruct` (verify current model card and license before publishing a derivative).
+3. **QuantAI specialist model:** a small instruction model fine-tuned with LoRA on research-methods questions and structured action-routing examples. Initial base: `Qwen/Qwen3-4B-Instruct-2507` (verify current model card and license before publishing a derivative).
 4. **Deterministic execution:** the model may request a supported action; QuantAI validates it and runs the existing JavaScript engine. All estimates, confidence intervals, p-values, model diagnostics and charts remain engine-generated.
 5. **Evaluation:** held-out cases measure valid JSON, action routing, exact action parameters, unsupported claims, and regression tests against the existing engine.
 
