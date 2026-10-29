@@ -21,6 +21,14 @@ This directory is a reproducible starting point, not a claim that a trained mode
 - Keep the fine-tuned adapter separate from the base model and record its base revision, dataset version, training configuration and evaluation report.
 - Do not assume Hugging Face Inference Providers will serve a custom fine-tuned adapter automatically. Hosting and costs depend on the selected deployment path. See [Hugging Face fine-tuning](https://huggingface.co/docs/transformers/training) and [Inference Providers pricing](https://huggingface.co/docs/inference-providers/pricing).
 
+## Validate the examples first
+
+The validator checks JSONL structure, supported action types, minimum example counts and exact prompt overlap between the training and held-out sets. It does not judge whether the examples are scientifically correct.
+
+```bash
+python validate_data.py --train data/train.jsonl --eval data/eval.jsonl
+```
+
 ## Train
 
 Use Python 3.10 or 3.11 in a GPU notebook or machine with sufficient memory.
