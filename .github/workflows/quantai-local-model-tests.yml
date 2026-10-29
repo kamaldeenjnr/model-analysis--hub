@@ -37,7 +37,13 @@ jobs:
         run: pytest -q test_frontend_contract.py
       - name: Validate training and held-out data
         working-directory: quantai-model
-        run: python validate_data.py --train data/train.jsonl --eval data/eval.jsonl
+        run: |
+          python validate_data.py --train data/train.jsonl --eval data/eval.jsonl
+          python validate_data.py --train data/v4/train.jsonl --eval data/v4/eval.jsonl
+          python datagen/audit.py data/v4/train.jsonl data/v4/eval.jsonl
+      - name: Run v4 prompt, data and scoring tests
+        working-directory: quantai-model
+        run: pytest -q test_pipeline_v4.py
       - name: Compile Python modules
         run: python -m compileall -q quantai-model
       - name: Run local response guard tests

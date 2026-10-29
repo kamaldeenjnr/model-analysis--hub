@@ -74,10 +74,10 @@ def normalize_prompt(text: str) -> str:
 
 def near_duplicates(train: list[dict[str, Any]], evaluation: list[dict[str, Any]], threshold: float) -> list[tuple[float, int, int]]:
     """Return (similarity, eval_line, train_line) for eval prompts too close to a training prompt."""
-    train_norm = [normalize_prompt(row["prompt"]) for row in train]
+    train_norm = [normalize_prompt(_row_text(row)) for row in train]
     hits = []
     for e_index, row in enumerate(evaluation):
-        target = normalize_prompt(row["prompt"])
+        target = normalize_prompt(_row_text(row))
         matcher = difflib.SequenceMatcher(None, "", target)  # b is cached; a varies per training row
         best, best_index = 0.0, -1
         for t_index, candidate in enumerate(train_norm):
@@ -92,7 +92,13 @@ def near_duplicates(train: list[dict[str, Any]], evaluation: list[dict[str, Any]
     return hits
 
 
+def _row_text(row: dict[str, Any]) -> str:
+    """The user's own words: the prompt for v3 rows, the chat message for v4 rows."""
+    return row["prompt"] if "prompt" in row else row["message"]
+
+
 def read_rows(path: Path) -> list[dict[str, Any]]:
+    """Read v3 rows ({prompt, completion}) or v4 rows ({message, context, history, completion, meta})."""
     rows: list[dict[str, Any]] = []
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
         if not line.strip():
@@ -101,8 +107,23 @@ def read_rows(path: Path) -> list[dict[str, Any]]:
             row = json.loads(line)
         except json.JSONDecodeError as exc:
             raise ValueError(f"{path}:{number}: invalid JSONL row: {exc}") from exc
-        if not isinstance(row, dict) or not isinstance(row.get("prompt"), str) or not row["prompt"].strip():
-            raise ValueError(f"{path}:{number}: prompt must be a non-empty string")
+        if not isinstance(row, dict):
+            raise ValueError(f"{path}:{number}: row must be an object")
+        if ("prompt" in row) == ("message" in row):
+            raise ValueError(f"{path}:{number}: a row needs either prompt (v3) or message (v4), not both")
+        if "prompt" in row:
+            if not isinstance(row["prompt"], str) or not row["prompt"].strip():
+                raise ValueError(f"{path}:{number}: prompt must be a non-empty string")
+        else:
+            if not isinstance(row["message"], str) or not row["message"].strip():
+                raise ValueError(f"{path}:{number}: message must be a non-empty string")
+            if not isinstance(row.get("context", ""), str):
+                raise ValueError(f"{path}:{number}: context must be a string")
+            history = row.get("history", [])
+            if not isinstance(history, list) or not all(
+                isinstance(h, dict) and h.get("role") in {"user", "assistant"} and isinstance(h.get("content"), str) for h in history
+            ):
+                raise ValueError(f"{path}:{number}: history must be a list of user/assistant messages")
         if not isinstance(row.get("completion"), str):
             raise ValueError(f"{path}:{number}: completion must be a JSON string")
         try:
@@ -139,8 +160,12 @@ def main() -> None:
         raise SystemExit("Training and evaluation paths must be different.")
     train = read_rows(args.train)
     evaluation = read_rows(args.eval)
-    train_prompts = {row["prompt"].strip().casefold() for row in train}
-    eval_prompts = {row["prompt"].strip().casefold() for row in evaluation}
+    # v4 rows share wording across different datasets, so exact overlap is checked on
+    # (message, scenario); v3 rows on the prompt alone.
+    def key(row):
+        return (_row_text(row).strip().casefold(), (row.get("meta") or {}).get("scenario"))
+    train_prompts = {key(row) for row in train}
+    eval_prompts = {key(row) for row in evaluation}
     overlap = train_prompts & eval_prompts
     errors = []
     if len(train) < args.min_train:
@@ -149,6 +174,12 @@ def main() -> None:
         errors.append(f"evaluation examples: {len(evaluation)} (minimum {args.min_eval})")
     if overlap:
         errors.append(f"{len(overlap)} exact prompt(s) occur in both splits")
+    train_scenarios = {(row.get("meta") or {}).get("scenario") for row in train}
+    shared = sorted(
+        {(row.get("meta") or {}).get("scenario") for row in evaluation} & train_scenarios - {None, "example_htn"}
+    )
+    if shared:
+        errors.append(f"held-out scenarios also appear in training: {shared}")
     leaks = near_duplicates(train, evaluation, args.max_similarity)
     for ratio, eval_line, train_line in leaks:
         errors.append(
