@@ -111,6 +111,10 @@ def main() -> None:
     parser.add_argument("--learning-rate", type=float, default=2e-4)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation", type=int, default=8)
+    parser.add_argument("--save-steps", type=int, default=6,
+                        help="Write a resumable checkpoint every N optimizer steps.")
+    parser.add_argument("--resume", action="store_true",
+                        help="Continue from the newest checkpoint in --output if one exists.")
     parser.add_argument("--push-to-hub", action="store_true")
     parser.add_argument("--hub-model-id", default="")
     args = parser.parse_args()
@@ -175,12 +179,14 @@ def main() -> None:
         per_device_eval_batch_size=1,
         gradient_accumulation_steps=args.gradient_accumulation,
         logging_steps=5,
+        # eval.jsonl is the held-out test set: its loss is logged each epoch for
+        # monitoring only. It must not select the checkpoint, so the final
+        # weights after the fixed number of epochs are kept.
         eval_strategy="epoch",
-        save_strategy="epoch",
+        save_strategy="steps",
+        save_steps=args.save_steps,
         save_total_limit=2,
-        load_best_model_at_end=True,
-        metric_for_best_model="eval_loss",
-        greater_is_better=False,
+        load_best_model_at_end=False,
         fp16=bool(use_cuda and not torch.cuda.is_bf16_supported()),
         bf16=bool(use_cuda and torch.cuda.is_bf16_supported()),
         report_to="none",
@@ -197,7 +203,15 @@ def main() -> None:
             tokenizer=tokenizer, padding=True, label_pad_token_id=-100
         ),
     )
-    trainer.train()
+    resume_from = None
+    if args.resume:
+        checkpoints = sorted(args.output.glob("checkpoint-*"), key=lambda p: int(p.name.split("-")[-1]))
+        if checkpoints:
+            resume_from = str(checkpoints[-1])
+            print(f"Resuming from {resume_from}")
+        else:
+            print("No checkpoint found; starting a fresh run.")
+    trainer.train(resume_from_checkpoint=resume_from)
     trainer.save_model(str(args.output))
     tokenizer.save_pretrained(str(args.output))
     print(f"Saved LoRA adapter and tokenizer to {args.output.resolve()}")
