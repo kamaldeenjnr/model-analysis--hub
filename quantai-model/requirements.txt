@@ -1,0 +1,7 @@
+# Use a fresh Python 3.10/3.11 environment. Review compatibility before upgrading.
+torch>=2.2
+transformers>=4.45,<5
+datasets>=3.0
+peft>=0.13
+accelerate>=1.0
+bitsandbytes>=0.44; platform_system == "Linux"
