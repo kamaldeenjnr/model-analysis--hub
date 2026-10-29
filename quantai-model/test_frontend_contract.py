@@ -21,7 +21,7 @@ def test_local_api_request_uses_expected_fields():
 
 
 def test_regression_offset_is_passed_to_deterministic_engine():
-    assert 'offset: a.offset ? need(a.offset, "the exposure offset", ["continuous", "count"]) : ""' in SOURCE
+    assert 'const offset = a.offset ? need(a.offset, "the exposure offset", ["continuous", "count"]) : ""' in SOURCE
     assert "offset: p.offset ? V(p.offset) : null" in SOURCE
     assert "const offsetLog = offset ? rows.map" in SOURCE
     assert 'offsetLog: model === "poisson" ? offsetLog : undefined' in SOURCE
