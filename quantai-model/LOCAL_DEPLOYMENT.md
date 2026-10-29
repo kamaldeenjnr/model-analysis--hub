@@ -33,32 +33,32 @@ The starter fixtures are synthetic smoke tests only. Expand and review the datas
 ## 3. Train the adapter
 Run on a GPU notebook or machine after checking the base model's license and current model card:
 ```bash
-python train_lora.py --train data/train.jsonl --eval data/eval.jsonl --output outputs/quantai-qwen3-4b-lora-v2
+python train_lora.py --train data/train.jsonl --eval data/eval.jsonl --output outputs/quantai-qwen3-4b-lora-v3
 ```
 The script uses the Qwen3 4B Instruct instruction base as a starting point. Training it does not mean the model was pretrained from scratch. The quality of the specialist depends heavily on reviewed data and evaluation.
 
 ## 4. Evaluate both candidates
 ```bash
-python evaluate.py --model outputs/quantai-qwen3-4b-lora-v2 --cases data/eval.jsonl --report outputs/fine-tuned-evaluation.json
-python evaluate.py --model outputs/quantai-qwen3-4b-lora-v2 --baseline-only --cases data/eval.jsonl --report outputs/base-evaluation.json
+python evaluate.py --model outputs/quantai-qwen3-4b-lora-v3 --cases data/eval.jsonl --report outputs/fine-tuned-evaluation-v3.json
+python evaluate.py --model outputs/quantai-qwen3-4b-lora-v3 --baseline-only --cases data/eval.jsonl --report outputs/base-evaluation-v3.json
 ```
 Review each failure, not just the aggregate scores. Synthetic examples cannot substantiate public claims about accuracy or safety.
 
 ## 5. Export a standalone local model
 ```bash
-python export_model.py --adapter outputs/quantai-qwen3-4b-lora-v2 --output outputs/quantai-merged-model-v2
+python export_model.py --adapter outputs/quantai-qwen3-4b-lora-v3 --output outputs/quantai-merged-model-v3
 ```
 The merged output includes the base weights plus the fine-tuned changes. Keep it local unless redistribution and all applicable base-model terms permit publishing it.
 
 ## 6. Start local inference
 ```bash
 # Windows PowerShell
-$env:QUANTAI_MODEL_PATH = (Resolve-Path outputs/quantai-merged-model-v2).Path
+$env:QUANTAI_MODEL_PATH = (Resolve-Path outputs/quantai-merged-model-v3).Path
 uvicorn serve:app --host 127.0.0.1 --port 8000
 ```
 Linux/macOS:
 ```bash
-export QUANTAI_MODEL_PATH="$PWD/outputs/quantai-merged-model-v2"
+export QUANTAI_MODEL_PATH="$PWD/outputs/quantai-merged-model-v3"
 uvicorn serve:app --host 127.0.0.1 --port 8000
 ```
 Check `http://127.0.0.1:8000/health`. Send a POST request to `/chat` with JSON fields `message`, optional `context`, and optional `history`. The knowledge base is indexed locally using SQLite full-text search. No API key is required for inference.
