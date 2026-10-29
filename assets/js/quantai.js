@@ -4057,7 +4057,15 @@ function runAction(a) {
   const many = (arr, label) => (Array.isArray(arr) ? arr : []).map(x => need(x, label));
   if (a.type === "describe") { const vars = many(a.vars && a.vars.length ? a.vars : varsUsable().map(v => v.name).slice(0, 8), "the table"); const group = a.group ? need(a.group, "the grouping variable", ["binary", "categorical"]) : ""; return { entry: addEntry("describe", { vars: vars.filter(v => v !== group), group }, runAnalysis("describe", { vars: vars.filter(v => v !== group), group })) }; }
   if (a.type === "compare") { const p = { outcome: need(a.outcome, "the outcome"), exposure: need(a.exposure, "the exposure"), paired: !!a.paired, force: "" }; return { entry: addEntry("compare", p, runAnalysis("compare", p)) }; }
-  if (a.type === "regression") { if (a.predictors === "auto") a = Object.assign({}, a, { predictors: candidatePredictors(need(a.outcome, "the outcome")) }); const p = { outcome: need(a.outcome, "the outcome"), preds: many(a.predictors, "the predictors"), model: ["auto", "linear", "logistic", "modpoisson", "poisson", "ordinal", "multinomial", "mixed"].includes(a.model) ? a.model : "auto", cluster: a.cluster ? need(a.cluster, "the cluster variable") : "", offset: a.offset ? need(a.offset, "the exposure offset", ["continuous", "count"]) : "" }; return { entry: addEntry("regression", p, runAnalysis("regression", p)) }; }
+  if (a.type === "regression") {
+    if (a.predictors === "auto") a = Object.assign({}, a, { predictors: candidatePredictors(need(a.outcome, "the outcome")) });
+    const outcome = need(a.outcome, "the outcome");
+    const preds = many(a.predictors, "the predictors");
+    const offset = a.offset ? need(a.offset, "the exposure offset", ["continuous", "count"]) : "";
+    if (offset && (offset === outcome || preds.includes(offset))) throw Object.assign(new Error("The exposure offset must be a positive exposure variable, not the outcome or an ordinary predictor."), { user: true });
+    const p = { outcome, preds, model: ["auto", "linear", "logistic", "modpoisson", "poisson", "ordinal", "multinomial", "mixed"].includes(a.model) ? a.model : "auto", cluster: a.cluster ? need(a.cluster, "the cluster variable") : "", offset };
+    return { entry: addEntry("regression", p, runAnalysis("regression", p)) };
+  }
   if (a.type === "survival") { const p = { time: need(a.time, "follow-up time", ["continuous", "count"]), event: need(a.event, "the event", ["binary"]), group: a.group ? need(a.group, "the group", ["binary", "categorical"]) : "", covs: many(a.covariates, "the covariates") }; return { entry: addEntry("survival", p, runAnalysis("survival", p)) }; }
   if (a.type === "forecast") {
     const value = need(a.value, "the value to forecast", ["continuous", "count"]), dv = a.date ? resolveVar(a.date) : null;
