@@ -49,7 +49,7 @@ The script uses 4-bit loading when a CUDA GPU and bitsandbytes are available; it
 ## Evaluate
 
 ```bash
-python evaluate.py --model outputs/quantai-qwen25-3b-lora --cases data/eval.jsonl --report outputs/evaluation.json
+python evaluate.py --model outputs/quantai-qwen25-3b-lora --cases data/eval.jsonl --report outputs/fine-tuned-evaluation.json\n\n# Compare the untouched base model on the same held-out cases\npython evaluate.py --model outputs/quantai-qwen25-3b-lora --baseline-only --cases data/eval.jsonl --report outputs/base-evaluation.json
 ```
 
 The evaluator reports JSON validity, supported action accuracy and exact action match. Inspect individual failures, and compare the fine-tuned adapter against the unfine-tuned base on the same held-out cases before choosing a deployment candidate. These metrics alone do not prove statistical correctness or safety.
