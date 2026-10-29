@@ -60,11 +60,53 @@ def parse_output(text: str) -> Any:
         return None
 
 
+ACTION_KEYS = {
+    "describe": {"type", "vars", "group"},
+    "compare": {"type", "outcome", "exposure", "paired"},
+    "regression": {"type", "outcome", "predictors", "model", "cluster"},
+    "survival": {"type", "time", "event", "group", "covariates"},
+    "forecast": {"type", "date", "value", "horizon"},
+    "check": {"type"}, "fix": {"type"}, "report": {"type"},
+    "open": {"type", "tool"},
+}
+OPEN_TOOLS = {"data", "describe", "compare", "regression", "survival", "forecast", "export", "question", "design", "sample", "test", "checklist"}
+REGRESSION_MODELS = {"auto", "linear", "logistic", "modpoisson", "poisson", "ordinal", "multinomial", "mixed"}
+
+
+def valid_action_item(item: Any) -> bool:
+    if not isinstance(item, dict) or item.get("type") not in ACTION_KEYS:
+        return False
+    kind = item["type"]
+    if set(item) != ACTION_KEYS[kind]:
+        return False
+    if kind == "describe":
+        return isinstance(item["vars"], list) and all(isinstance(v, str) for v in item["vars"]) and (item["group"] is None or isinstance(item["group"], str))
+    if kind == "compare":
+        return isinstance(item["outcome"], str) and isinstance(item["exposure"], str) and isinstance(item["paired"], bool)
+    if kind == "regression":
+        return (isinstance(item["outcome"], str) and isinstance(item["predictors"], list)
+                and all(isinstance(v, str) for v in item["predictors"])
+                and item["model"] in REGRESSION_MODELS
+                and (item["cluster"] is None or isinstance(item["cluster"], str)))
+    if kind == "survival":
+        return (isinstance(item["time"], str) and isinstance(item["event"], str)
+                and (item["group"] is None or isinstance(item["group"], str))
+                and isinstance(item["covariates"], list)
+                and all(isinstance(v, str) for v in item["covariates"]))
+    if kind == "forecast":
+        return ((item["date"] is None or isinstance(item["date"], str))
+                and isinstance(item["value"], str) and isinstance(item["horizon"], int)
+                and not isinstance(item["horizon"], bool) and 1 <= item["horizon"] <= 120)
+    if kind == "open":
+        return item["tool"] in OPEN_TOOLS
+    return kind in {"check", "fix", "report"}
+
+
 def valid_action(action: Any) -> bool:
     if action is None:
         return True
     items = action if isinstance(action, list) else [action]
-    return bool(items) and all(isinstance(item, dict) and item.get("type") in SUPPORTED_ACTIONS for item in items)
+    return bool(items) and len(items) <= 4 and all(valid_action_item(item) for item in items)
 
 
 def action_types(action: Any) -> Any:
