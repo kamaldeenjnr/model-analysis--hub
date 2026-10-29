@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "quantai-model/**"
+      - "assets/js/quantai.js"
       - ".github/workflows/quantai-local-model-tests.yml"
   pull_request:
     paths:
@@ -25,6 +26,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install "transformers>=4.51,<5" "fastapi>=0.115,<1" "pytest>=8,<9"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check browser JavaScript syntax
+        run: node --check assets/js/quantai.js
+      - name: Check local API and offset integration contract
+        working-directory: quantai-model
+        run: pytest -q test_frontend_contract.py
       - name: Validate training and held-out data
         working-directory: quantai-model
         run: python validate_data.py --train data/train.jsonl --eval data/eval.jsonl
