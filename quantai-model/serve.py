@@ -22,6 +22,7 @@ KNOWLEDGE_PATH = Path(os.environ.get("QUANTAI_KNOWLEDGE_PATH", ROOT / "KNOWLEDGE
 DB_PATH = Path(os.environ.get("QUANTAI_KNOWLEDGE_DB", ROOT / "knowledge.sqlite3"))
 MAX_INPUT_CHARS = int(os.environ.get("QUANTAI_MAX_INPUT_CHARS", "10000"))
 MAX_NEW_TOKENS = int(os.environ.get("QUANTAI_MAX_NEW_TOKENS", "500"))
+MAX_INPUT_TOKENS = int(os.environ.get("QUANTAI_MAX_INPUT_TOKENS", "8192"))
 ACTION_FIELDS = {
     "describe": {"type", "vars", "group"},
     "compare": {"type", "outcome", "exposure", "paired"},
@@ -215,15 +216,15 @@ def chat(request: ChatRequest) -> ChatResponse:
         "\n\nUSER QUESTION:\n" + request.message
     )
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    for item in request.history[-8:]:
+    for item in request.history[-4:]:
         role = item.get("role")
         content = item.get("content")
         if role in {"user", "assistant"} and isinstance(content, str):
-            messages.append({"role": role, "content": content[:2000]})
+            messages.append({"role": role, "content": content[:1000]})
     messages.append({"role": "user", "content": user_content})
     try:
         prompt = _tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = _tokenizer(prompt, return_tensors="pt", truncation=True, max_length=4096)
+        inputs = _tokenizer(prompt, return_tensors="pt", truncation=True, max_length=MAX_INPUT_TOKENS)
         if torch.cuda.is_available():
             inputs = {key: value.to(_model.device) for key, value in inputs.items()}
         with _model_lock, torch.inference_mode():
