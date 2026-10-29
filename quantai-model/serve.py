@@ -2,6 +2,7 @@
 """Local, self-hosted QuantAI inference service. No third-party inference API is called."""
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -64,20 +65,30 @@ _model_lock = threading.Lock()
 def initialise_knowledge() -> None:
     if not KNOWLEDGE_PATH.exists():
         return
-    text = KNOWLEDGE_PATH.read_text(encoding="utf-8")
+    source_text = KNOWLEDGE_PATH.read_text(encoding="utf-8")
+    digest = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS knowledge USING fts5(title, body)")
-        current = conn.execute("SELECT count(*) FROM knowledge").fetchone()[0]
-        if current:
+        conn.execute("CREATE TABLE IF NOT EXISTS knowledge_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        previous = conn.execute("SELECT value FROM knowledge_meta WHERE key='sha256'").fetchone()
+        if previous and previous[0] == digest:
             return
-        sections = re.split(r"(?m)^##?\s+", text)
+        conn.execute("DELETE FROM knowledge")
+        sections = re.split(r"(?m)^##?\\s+", source_text)
         for index, section in enumerate(sections):
             body = section.strip()
             if len(body) > 80:
-                title, _, content = body.partition("\n")
-                conn.execute("INSERT INTO knowledge(title, body) VALUES (?, ?)", (title[:200] or f"Section {index}", content or body))
-
+                title, _, content = body.partition("\\n")
+                conn.execute(
+                    "INSERT INTO knowledge(title, body) VALUES (?, ?)",
+                    (title[:200] or f"Section {index}", content or body),
+                )
+        conn.execute(
+            "INSERT INTO knowledge_meta(key, value) VALUES('sha256', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (digest,),
+        )
 
 def retrieve(query: str, limit: int = 4) -> list[dict[str, str]]:
     if not DB_PATH.exists():
