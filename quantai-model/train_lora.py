@@ -12,6 +12,8 @@ import os
 from pathlib import Path
 from typing import Any
 
+import sys
+
 import torch
 from datasets import Dataset
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
@@ -23,27 +25,15 @@ from transformers import (
     TrainingArguments,
 )
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import prompting  # noqa: E402  identical prompt construction to serve.py
+
 DEFAULT_BASE = "Qwen/Qwen3-4B-Instruct-2507"
-SYSTEM_PROMPT = """You are QuantAI, a research-methods and biostatistics assistant.
-Return exactly one JSON object with exactly two top-level keys: "reply" and "action".
-For a question or explanation that does not request a tool, set "action": null.
-Never invent variable names, results, coefficients, p-values, confidence intervals, sample sizes, or diagnostics. The deterministic engine computes statistics. Ask a concise clarification and set action to null when required information is unavailable.
-For a tool action, action may be one object or a list of up to four action objects when multiple actions are needed. Every action must use the schemas below. Include EVERY listed key, including keys whose value is null, false, or an empty list. Do not omit keys and do not add extra keys.
-- describe: {"type":"describe","vars":["exact_variable_name"],"group":null}; vars must list the requested variables from context and group is a variable name or null.
-- compare: {"type":"compare","outcome":"exact_variable_name","exposure":"exact_variable_name","paired":false}; paired must always be true or false.
-- regression: {"type":"regression","outcome":"exact_variable_name","predictors":["exact_variable_name"],"model":"auto","cluster":null,"offset":null}; model must be one of auto, linear, logistic, modpoisson, poisson, ordinal, multinomial, mixed. Use the requested model; use auto only when the user has not specified a model. cluster is a variable name or null. offset is null unless the user requests a count rate with a positive exposure/person-time variable; then set offset to that variable name, use model "poisson", and do NOT add the offset variable to predictors. The deterministic engine will use log(exposure) as the offset.
-- survival: {"type":"survival","time":"exact_variable_name","event":"exact_variable_name","group":null,"covariates":[]}; group is a variable name or null and covariates is always a list.
-- forecast: {"type":"forecast","date":null,"value":"exact_variable_name","horizon":4}; date is the date/time variable name or null, value is the series variable, and horizon is an integer from 1 to 120.
-- check: {"type":"check"}
-- fix: {"type":"fix"}
-- report: {"type":"report"}
-- open: {"type":"open","tool":"regression"}; tool must be one of data, describe, compare, regression, survival, forecast, export, question, design, sample, test, checklist.
-If a request needs a feature or parameter that the action schema cannot represent, do not silently drop it: ask for clarification or explain the limitation and set action to null.
-Distinguish association from causation and odds ratios from risk or prevalence ratios. Do not claim an analysis has run until the deterministic engine returns results.
-"""
+ROOT = Path(__file__).resolve().parent
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    """Read v3 rows ({prompt, completion}) or v4 rows ({message, context, history, completion})."""
     rows = []
     with path.open("r", encoding="utf-8") as stream:
         for line_no, line in enumerate(stream, start=1):
@@ -53,51 +43,79 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
                 row = json.loads(line)
             except json.JSONDecodeError as exc:
                 raise ValueError(f"{path}:{line_no}: invalid JSON: {exc}") from exc
-            if not isinstance(row.get("prompt"), str) or not isinstance(row.get("completion"), str):
-                raise ValueError(f"{path}:{line_no}: expected string prompt and completion")
+            has_prompt = isinstance(row.get("prompt"), str)
+            has_message = isinstance(row.get("message"), str)
+            if has_prompt == has_message or not isinstance(row.get("completion"), str):
+                raise ValueError(f"{path}:{line_no}: expected either prompt or message (not both) and a string completion")
             try:
                 parsed = json.loads(row["completion"])
             except json.JSONDecodeError as exc:
                 raise ValueError(f"{path}:{line_no}: completion must be valid JSON: {exc}") from exc
             if set(parsed) != {"reply", "action"} or not isinstance(parsed["reply"], str):
                 raise ValueError(f"{path}:{line_no}: completion must contain reply and action")
-            rows.append({"prompt": row["prompt"], "completion": row["completion"]})
+            rows.append(row)
     if not rows:
         raise ValueError(f"No examples found in {path}")
     return rows
 
 
-def build_dataset(rows: list[dict[str, str]], tokenizer, max_length: int) -> Dataset:
-    processed = []
-    for row in rows:
-        prompt_messages = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": row["prompt"]},
-        ]
-        prompt_text = tokenizer.apply_chat_template(
-            prompt_messages, tokenize=False, add_generation_prompt=True
-        )
-        completion_text = row["completion"] + (tokenizer.eos_token or "")
-        completion_ids = tokenizer(
-            completion_text, add_special_tokens=False, truncation=True,
-            max_length=max_length // 2
-        )["input_ids"]
-        prompt_budget = max(1, max_length - len(completion_ids))
-        old_side = tokenizer.truncation_side
-        tokenizer.truncation_side = "left"
-        prompt_ids = tokenizer(
-            prompt_text, add_special_tokens=False, truncation=True,
-            max_length=prompt_budget
-        )["input_ids"]
-        tokenizer.truncation_side = old_side
-        input_ids = (prompt_ids + completion_ids)[:max_length]
-        labels = ([-100] * len(prompt_ids) + completion_ids)[:max_length]
+def build_dataset(rows: list[dict[str, Any]], tokenizer, max_length: int, db_path: Path, prompt_version: str) -> Dataset:
+    """Tokenise rows exactly as serve.py builds its input. Never truncates: a row
+    that does not fit is an error, because cutting the system prompt or the target
+    answer would silently teach the wrong thing."""
+    processed, lengths, too_long = [], [], []
+    for index, row in enumerate(rows):
+        messages = prompting.messages_for_row(row, db_path, prompt_version)
+        prompt_text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        completion_ids = tokenizer(row["completion"] + (tokenizer.eos_token or ""), add_special_tokens=False)["input_ids"]
+        prompt_ids = tokenizer(prompt_text, add_special_tokens=False)["input_ids"]
+        total = len(prompt_ids) + len(completion_ids)
+        lengths.append(total)
+        if total > max_length:
+            too_long.append((index + 1, total))
+            continue
         processed.append({
-            "input_ids": input_ids,
-            "attention_mask": [1] * len(input_ids),
-            "labels": labels,
+            "input_ids": prompt_ids + completion_ids,
+            "attention_mask": [1] * total,
+            "labels": [-100] * len(prompt_ids) + completion_ids,
         })
+    lengths.sort()
+    print(f"Token lengths: n={len(lengths)} median={lengths[len(lengths) // 2]} "
+          f"p95={lengths[int(len(lengths) * 0.95) - 1 if len(lengths) > 1 else 0]} max={lengths[-1]} (limit {max_length})")
+    if too_long:
+        raise SystemExit(
+            f"{len(too_long)} example(s) exceed --max-length {max_length} tokens (first: row {too_long[0][0]} "
+            f"with {too_long[0][1]}). Raise --max-length; rows are never truncated."
+        )
     return Dataset.from_list(processed)
+
+
+def sha256(path: Path) -> str:
+    import hashlib
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def write_manifest(args, n_train: int, n_eval: int) -> None:
+    """Record what this run was trained on so results can be reproduced and compared."""
+    import platform
+    import transformers
+    import peft
+    manifest = {
+        "base_model": args.base_model,
+        "prompt_version": args.prompt_version,
+        "train_file": str(args.train), "train_sha256": sha256(args.train), "train_rows": n_train,
+        "eval_file": str(args.eval), "eval_sha256": sha256(args.eval), "eval_rows": n_eval,
+        "max_train_rows": args.max_train_rows, "eval_limit": args.eval_limit,
+        "epochs": args.epochs, "learning_rate": args.learning_rate, "batch_size": args.batch_size,
+        "gradient_accumulation": args.gradient_accumulation, "max_length": args.max_length, "seed": 42,
+        "lora": {"r": 8, "alpha": 16, "dropout": 0.05},
+        "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "versions": {"python": platform.python_version(), "torch": torch.__version__,
+                     "transformers": transformers.__version__, "peft": peft.__version__},
+    }
+    args.output.mkdir(parents=True, exist_ok=True)
+    (args.output / "training_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    print(f"Wrote {args.output / 'training_manifest.json'}")
 
 
 def main() -> None:
@@ -106,12 +124,22 @@ def main() -> None:
     parser.add_argument("--eval", type=Path, default=Path("data/eval.jsonl"))
     parser.add_argument("--base-model", default=DEFAULT_BASE)
     parser.add_argument("--output", type=Path, default=Path("outputs/quantai-lora"))
-    parser.add_argument("--max-length", type=int, default=1024)
+    parser.add_argument("--max-length", type=int, default=3584,
+                        help="Maximum tokens per example (prompt + answer). Rows longer than this stop training.")
+    parser.add_argument("--prompt-version", default=prompting.DEFAULT_PROMPT_VERSION, choices=sorted(prompting.SYSTEM_PROMPTS),
+                        help="System prompt version; serve.py must use the same QUANTAI_PROMPT_VERSION.")
+    parser.add_argument("--knowledge-db", type=Path, default=ROOT / "knowledge.sqlite3",
+                        help="Retrieval index built from the knowledge files, as serve.py uses.")
     parser.add_argument("--epochs", type=float, default=3)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation", type=int, default=8)
-    parser.add_argument("--save-steps", type=int, default=6,
+    parser.add_argument("--max-train-rows", type=int, default=0,
+                        help="Train on a stratified subset of this many rows (0 = all).")
+    parser.add_argument("--eval-limit", type=int, default=60,
+                        help="Rows of the held-out file used for the loss printed during training (0 = all). "
+                             "The full file is scored separately by evaluate.py.")
+    parser.add_argument("--save-steps", type=int, default=10,
                         help="Write a resumable checkpoint every N optimizer steps.")
     parser.add_argument("--resume", action="store_true",
                         help="Continue from the newest checkpoint in --output if one exists.")
@@ -121,6 +149,7 @@ def main() -> None:
 
     train_rows = read_jsonl(args.train)
     eval_rows = read_jsonl(args.eval)
+    n_train_file, n_eval_file = len(train_rows), len(eval_rows)
     if len(train_rows) < 20:
         raise SystemExit("Refusing to train: provide at least 20 reviewed training examples.")
     if len(eval_rows) < 10:
@@ -168,8 +197,14 @@ def main() -> None:
     model = get_peft_model(model, lora)
     model.print_trainable_parameters()
 
-    train_ds = build_dataset(train_rows, tokenizer, args.max_length)
-    eval_ds = build_dataset(eval_rows, tokenizer, args.max_length)
+    train_rows = prompting.stratified_subset(train_rows, args.max_train_rows)
+    eval_rows = prompting.stratified_subset(eval_rows, args.eval_limit)
+    print(f"Training rows: {len(train_rows)} of {n_train_file}; loss-monitoring rows: {len(eval_rows)} of {n_eval_file}")
+    sections = prompting.initialise_knowledge(prompting.knowledge_sources(ROOT), args.knowledge_db)
+    print(f"Knowledge index: {sections} sections; prompt version {args.prompt_version}")
+    train_ds = build_dataset(train_rows, tokenizer, args.max_length, args.knowledge_db, args.prompt_version)
+    eval_ds = build_dataset(eval_rows, tokenizer, args.max_length, args.knowledge_db, args.prompt_version)
+    write_manifest(args, len(train_rows), len(eval_rows))
     args.output.mkdir(parents=True, exist_ok=True)
     training_args = TrainingArguments(
         output_dir=str(args.output),

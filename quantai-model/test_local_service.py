@@ -257,3 +257,48 @@ def test_chat_handler_returns_a_browser_compatible_offset_action(monkeypatch):
         "cluster": None,
         "offset": "person_days",
     }
+
+
+def test_chat_handler_sends_the_same_messages_as_training(monkeypatch, tmp_path):
+    """serve.chat() and train_lora/evaluate must build identical model input (prompting.py)."""
+    import json
+    import torch
+    import prompting
+
+    seen = {}
+
+    class FakeTokenizer:
+        pad_token_id = 0
+        eos_token_id = 2
+
+        def apply_chat_template(self, messages, **kwargs):
+            seen["messages"] = messages
+            return "mock prompt"
+
+        def __call__(self, prompt, **kwargs):
+            return {"input_ids": torch.tensor([[1, 2]])}
+
+        def decode(self, token_ids, **kwargs):
+            return json.dumps({"reply": "Which predictors should I include?", "action": None})
+
+    class FakeModel:
+        device = "cpu"
+
+        def generate(self, **kwargs):
+            return torch.tensor([[1, 2, 3]])
+
+    db = tmp_path / "k.sqlite3"
+    monkeypatch.setattr(module, "DB_PATH", db)
+    module.initialise_knowledge()
+    monkeypatch.setattr(module, "load_model", lambda: None)
+    monkeypatch.setattr(module, "_tokenizer", FakeTokenizer())
+    monkeypatch.setattr(module, "_model", FakeModel())
+    history = [{"role": "user", "content": "Run a logistic regression."},
+               {"role": "assistant", "content": "Which outcome?"}]
+    request = module.ChatRequest(message="Model anaemia prevalence ratios", context="DATASET: x; VARIABLES ...", history=history)
+    response = module.chat(request)
+    retrieved = prompting.retrieve(db, prompting.retrieval_query(request.message))
+    assert retrieved, "the knowledge index should match this question"
+    assert seen["messages"] == prompting.build_messages(request.message, request.context, history, retrieved, module.PROMPT_VERSION)
+    assert response.action is None and response.retrieved_knowledge == [r["title"] for r in retrieved]
+

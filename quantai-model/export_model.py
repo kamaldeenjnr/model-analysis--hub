@@ -27,6 +27,14 @@ def main() -> None:
     merged.save_pretrained(args.output, safe_serialization=True, max_shard_size="2GB")
     tokenizer = AutoTokenizer.from_pretrained(str(args.adapter), use_fast=True)
     tokenizer.save_pretrained(args.output)
+    # Record the prompt version so serve.py uses the prompt this model was trained with.
+    import json
+    manifest = args.adapter / "training_manifest.json"
+    version = json.loads(manifest.read_text(encoding="utf-8")).get("prompt_version", "v3") if manifest.exists() else "v3"
+    (args.output / "quantai_prompt.json").write_text(json.dumps({"prompt_version": version}), encoding="utf-8")
+    if manifest.exists():
+        (args.output / "training_manifest.json").write_text(manifest.read_text(encoding="utf-8"), encoding="utf-8")
+    print(f"Prompt version recorded for serving: {version}")
     print(f"Standalone model saved to {args.output.resolve()}")
     print("Review the base-model license and model card before redistribution.")
 if __name__ == "__main__":
