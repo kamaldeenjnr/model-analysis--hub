@@ -23,7 +23,7 @@ from transformers import (
     TrainingArguments,
 )
 
-DEFAULT_BASE = "Qwen/Qwen2.5-3B-Instruct"
+DEFAULT_BASE = "Qwen/Qwen3-4B-Instruct-2507"
 SYSTEM_PROMPT = (
     "You are QuantAI, a research-methods and statistics assistant. "
     "Return exactly one JSON object with keys reply and action. "

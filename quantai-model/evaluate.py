@@ -68,7 +68,7 @@ def action_types(action: Any) -> Any:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", required=True, help="Local LoRA adapter directory")
-    parser.add_argument("--base-model", default="Qwen/Qwen2.5-3B-Instruct")
+    parser.add_argument("--base-model", default="Qwen/Qwen3-4B-Instruct-2507")
     parser.add_argument("--cases", type=Path, default=Path("data/eval.jsonl"))
     parser.add_argument("--report", type=Path, default=Path("outputs/evaluation.json"))
     parser.add_argument("--max-new-tokens", type=int, default=220)
