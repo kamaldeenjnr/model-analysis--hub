@@ -16,6 +16,19 @@ MODEL_OUTCOME = {
     "ordinal": {"ordinal"}, "multinomial": {"categorical"}, "mixed": {"continuous"},
     "auto": {"continuous", "count", "binary", "ordinal", "categorical"},
 }
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from intents import OUTONLY, RELATED, XONLY, code_name  # noqa: E402
+from scenarios import BUILTIN, SCENARIOS  # noqa: E402
+
+
+def _roles(scenario: str) -> dict[str, str]:
+    """Map QuantAI's variable names to the generator's keys for one scenario."""
+    sc = BUILTIN if scenario == BUILTIN.sid else SCENARIOS.get(scenario)
+    if sc is None:
+        return {}
+    return {(v.key if sc.builtin else code_name(v.header)): v.key for v in sc.variables}
+
+
 NUMBER = re.compile(r"(?<![\w.])\d+(?:[.,]\d+)?(?![\w])")
 CONCEPT_INTENTS = {"concept_handbook", "concept_deeper"}
 
@@ -89,6 +102,21 @@ def problems(row: dict) -> list[str]:
             visible(a["value"], "forecast value")
             if a["date"] is not None:
                 visible(a["date"], "forecast date")
+    # study-design sense: no derived pairs, no post-baseline predictors, no demographic outcomes
+    key = _roles(row["meta"]["scenario"])
+    for a in items:
+        used = [x for x in [a.get("outcome"), a.get("exposure"), a.get("time"), a.get("event"), a.get("group"), a.get("offset")]
+                + list(a.get("predictors") or []) + list(a.get("covariates") or []) if isinstance(x, str)]
+        if a["type"] != "describe" and a["type"] != "compare":
+            keys = {key.get(x) for x in used}
+            for g in RELATED:
+                if len(keys & g) > 1:
+                    out.append(f"related variables in one analysis: {sorted(keys & g)}")
+        for x in list(a.get("predictors") or []) + list(a.get("covariates") or []) + ([a["group"]] if a["type"] == "survival" and a.get("group") else []):
+            if key.get(x) in OUTONLY:
+                out.append(f"outcome or follow-up measure used as a predictor: {x}")
+        if a["type"] == "regression" and key.get(a["outcome"]) in XONLY:
+            out.append(f"background variable used as a regression outcome: {a['outcome']}")
     # no number in a reply unless the user or QuantAI's context already contains it
     if row["meta"]["intent"] not in CONCEPT_INTENTS:
         allowed = set(NUMBER.findall(row["message"] + " " + row["context"] + " " + json.dumps(row.get("history", []))))

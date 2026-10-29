@@ -99,17 +99,33 @@ class Ctx:
             return None
         return self.rng.sample(pool, k)
 
+    def group(self, exclude: list[Var] = ()) -> Var | None:
+        """A baseline grouping variable for comparing survival (not an outcome or a related measure)."""
+        pool = [v for v in self.sc.by_kind("bin", "cat") if v not in exclude and v.key not in OUTONLY
+                and not any(related(v, x) for x in exclude)]
+        return self.rng.choice(pool) if pool else None
+
     def exposure(self, exclude: list[Var]) -> Var | None:
         """A substantive exposure for causal or invented-result wording (not age or sex) when one exists."""
-        pool = [v for v in self.sc.by_kind("cont", "bin", "cat", "ord", "count") if v not in exclude and v.key not in DEMOG]
+        pool = [v for v in self.sc.by_kind("cont", "bin", "cat", "ord", "count") if v not in exclude and v.key not in DEMOG
+                and v.key not in OUTONLY and not any(related(v, x) for x in exclude)]
         return self.rng.choice(pool) if pool else None
 
     def predictors(self, exclude: list[Var], lo: int = 1, hi: int = 3) -> list[Var] | None:
+        """Plausible predictors: measured at baseline, not outcomes, and not defined from the
+        outcome or from each other."""
+        rate_counts = {k for k, _ in self.sc.rates}
         pool = [v for v in self.sc.by_kind("age", "cont", "bin", "cat", "ord", "count")
-                if v not in exclude]
-        if not pool:
+                if v not in exclude and v.key not in OUTONLY and v.key not in rate_counts
+                and not any(related(v, x) for x in exclude)]
+        self.rng.shuffle(pool)
+        chosen: list[Var] = []
+        for v in pool:
+            if not any(related(v, c) for c in chosen):
+                chosen.append(v)
+        if not chosen:
             return None
-        return self.rng.sample(pool, min(len(pool), self.rng.randint(lo, hi)))
+        return chosen[:min(len(chosen), self.rng.randint(lo, hi))]
 
     def choice(self, items):
         return self.rng.choice(items)
@@ -134,6 +150,26 @@ XONLY = {"sex", "district", "region", "residence", "ward", "cls", "shift", "vehi
          "water", "mode", "arm", "regimen", "stage", "place", "destination", "treatment", "trimester", "income", "edu", "medu",
          "hiv", "diabetes", "diabetic", "alone", "smoke", "daycare", "swims", "pzq", "hu", "education_level", "employment"}
 DEMOG = {"sex", "age", "agem", "mage", "age_years"}
+# Also never outcomes: background or process measures where "X explained by ..." makes no sense.
+XONLY |= {"agem", "mage", "dist", "hhsize", "siblings", "parity", "experience", "workload", "years", "duration", "staff", "noise",
+          "ratio", "staffing", "contact", "rehab", "overtime", "cd4", "ga", "anc", "outreach", "hu", "net", "latrine", "iron"}
+# Outcomes or things measured after baseline: never predictors or covariates.
+OUTONLY = {"vls", "outcome", "died", "hosp", "converted", "operated", "discharged", "stopped", "recovered", "lost_to_follow_up",
+           "sbp6", "barthel3", "weightgain", "missed", "systolic_bp_3_months", "systolic_bp_6_months", "clinic_visits_12m",
+           "aware_of_status_3_months", "lbw", "obese", "stunted", "anaemia", "depressed", "burned", "controlled", "rejected"}
+# Variables defined from, or nearly the same as, each other: never in the same analysis.
+RELATED = [{"haz", "stunted"}, {"sbp6", "controlled"}, {"hba1c", "fbg", "controlled"}, {"hb", "anaemia"},
+           {"bmi", "obese", "waist"}, {"bw", "lbw"}, {"phq9", "depressed"}, {"burnout", "burned"}, {"los", "ptdays"},
+           {"infected", "eggs"}, {"systolic_bp", "systolic_bp_3_months", "systolic_bp_6_months", "hypertension"},
+           {"died", "recovery"}, {"died", "recovered"}, {"knowledge", "diarrhoea"}]
+
+
+EVENT_COUNTS = {"episodes", "diarrhoea", "falls", "visits", "crises", "admissions", "admit", "absent", "sickdays", "infections",
+                "hosps", "clinic_visits_12m", "sessions", "missed", "outreach"}
+
+
+def related(a, b) -> bool:
+    return any(a.key in g and b.key in g for g in RELATED)
 
 OUTCOME_KINDS = {"bin": "binary", "count": "a count", "cat": "categorical", "ord": "ordinal", "cont": "continuous", "age": "continuous", "event": "binary"}
 
@@ -231,7 +267,8 @@ def compare(c: Ctx):
     if not g:
         return None
     g = g[0]
-    y = c.out(("age", "cont", "bin", "ord", "count", "cat"), exclude=[g])
+    rate_counts = [c.sc.var(k) for k, _ in c.sc.rates]
+    y = c.out(("age", "cont", "bin", "ord", "count", "cat"), exclude=[g] + rate_counts)
     if not y:
         return None
     y = y[0]
@@ -287,9 +324,9 @@ T_MODP = {
              "Get me risk ratios rather than ORs for {y}, adjusting for {xs}."],
 }
 T_POIS = {
-    "train": ["Fit a Poisson regression for {y} with {xs}.", "Model the number of {y} using {xs}.", "Run a count model for {y} with {xs}.",
+    "train": ["Fit a Poisson regression for {y} with {xs}.", "Model {y} as a count using {xs}.", "Run a count model for {y} with {xs}.",
               "Poisson model: {y} by {xs}."],
-    "eval": ["Which of {xs} predict higher counts of {y}? Use Poisson regression."],
+    "eval": ["Do {xs} predict higher counts of {y}? Use Poisson regression."],
 }
 T_RATE = {
     "train": ["Estimate the rate of {y} per {e} by {xs}.", "Model {y} rates, using {e} as the exposure, with {xs}.",
@@ -340,7 +377,7 @@ def reg_linear(c: Ctx):
 
 
 def reg_auto(c: Ctx):
-    y = c.out(("cont", "bin", "count", "ord", "cat"))
+    y = c.out(("cont", "bin", "count", "ord", "cat"), exclude=[c.sc.var(k) for k, _ in c.sc.rates])
     if not y:
         return None
     y = y[0]
@@ -363,7 +400,7 @@ def reg_logistic(c: Ctx):
     if not xs:
         return None
     return example("reg_logistic", c.t(T_LOGIT).format(y=c.m(y), xs=c.ms(xs)),
-                   f"I'll fit binary logistic regression for {y.header} with {c.labs(xs)} and report adjusted odds ratios. Note that odds ratios overstate risk ratios when the outcome is common.",
+                   f"I'll fit binary logistic regression for {y.header} with {c.labs(xs)} and report {'adjusted ' if len(xs) > 1 else ''}odds ratios. Note that odds ratios overstate risk ratios when the outcome is common.",
                    reg(y, xs, "logistic"))
 
 
@@ -376,8 +413,9 @@ def reg_modpoisson(c: Ctx):
     if not xs:
         return None
     msg = c.t(T_MODP).format(y=c.m(y), Y=cap(c.m(y)), xs=c.ms(xs))
+    measure = "risk ratios" if re.search(r"risk ratio|relative risk", msg, re.I) else "prevalence ratios"
     return example("reg_modpoisson", msg,
-                   f"I'll fit modified Poisson regression (log link with robust standard errors) for {y.header} with {c.labs(xs)}, so the estimates are adjusted prevalence ratios rather than odds ratios.",
+                   f"I'll fit modified Poisson regression (log link with robust standard errors) for {y.header} with {c.labs(xs)}, so the estimates are {'adjusted ' if len(xs) > 1 else ''}{measure} rather than odds ratios.",
                    reg(y, xs, "modpoisson"))
 
 
@@ -391,7 +429,7 @@ def reg_poisson(c: Ctx):
     if not xs:
         return None
     return example("reg_poisson", c.t(T_POIS).format(y=c.m(y), xs=c.ms(xs)),
-                   f"I'll fit Poisson regression for the count {y.header} with {c.labs(xs)}; the engine reports incidence rate ratios and switches to robust standard errors if it detects overdispersion.",
+                   f"I'll fit Poisson regression for the count {y.header} with {c.labs(xs)}; the engine reports ratios of mean counts (rate ratios, assuming equal observation time for everyone) and switches to robust standard errors if it detects overdispersion.",
                    reg(y, xs, "poisson"))
 
 
@@ -403,7 +441,8 @@ def reg_rate(c: Ctx):
     tpl = c.t(T_RATE)
     if "{x1}" in tpl:
         # wording about groups or levels needs a categorical variable in that slot
-        groups = [v for v in c.sc.by_kind("bin", "cat", "ord") if v not in (y, e)]
+        groups = [v for v in c.sc.by_kind("bin", "cat", "ord") if v not in (y, e) and v.key not in OUTONLY
+                  and not related(v, y)]
         if not groups:
             return None
         x1 = c.choice(groups)
@@ -415,7 +454,7 @@ def reg_rate(c: Ctx):
             return None
     msg = tpl.format(y=c.m(y), Y=cap(c.m(y)), e=c.m(e), xs=c.ms(xs), x1=c.m(xs[0]), adj=_adj(c, xs[1:]))
     return example("reg_rate", msg,
-                   f"I'll fit Poisson regression of {y.header} on {c.labs(xs)} with log({e.header}) as the offset, so the estimates are rate ratios per unit of {e.header}. {e.header} is the exposure offset, not a predictor.",
+                   f"I'll fit Poisson regression of {y.header} on {c.labs(xs)} with log({e.header}) as the offset, so the model compares rates of {y.header} per {e.header} and reports rate ratios. {e.header} is the exposure offset, not a predictor.",
                    reg(y, xs, "poisson", offset=e))
 
 
@@ -476,7 +515,7 @@ T_SURV_CMP = {
     "train": ["Compare time to {d} between {g} groups and adjust for {xs}.", "Compare {t} by {g}, adjusting for {xs}.",
               "Does time to {d} differ by {g} after adjusting for {xs}?", "Compare how long until {d} across {g}, controlling for {xs}."],
     "eval": ["Is the time until {d} different for {g} groups once {xs} are taken into account?",
-             "Compare {d} timing across {g} with adjustment for {xs}."],
+             "Compare the timing of {d} across {g}, with adjustment for {xs}."],
 }
 
 
@@ -489,10 +528,12 @@ def _surv(c: Ctx):
 
 def surv_group(c: Ctx):
     s = _surv(c)
-    g = c.pick(("bin", "cat"))
-    if not s or not g:
+    if not s:
         return None
-    (t, d), g = s, g[0]
+    t, d = s
+    g = c.group([t, d])
+    if not g:
+        return None
     return example("surv_group", c.t(T_SURV_G).format(t=c.m(t), d=c.m(d), g=c.m(g)),
                    f"This is a time-to-event question, so I'll run a survival analysis of {t.header} with {d.header} as the event, comparing {g.header} groups with Kaplan-Meier curves and a log-rank test.",
                    {"type": "survival", "time": ph(t), "event": ph(d), "group": ph(g), "covariates": []})
@@ -513,10 +554,12 @@ def surv_cox(c: Ctx):
 
 def surv_compare(c: Ctx):
     s = _surv(c)
-    g = c.pick(("bin", "cat"))
-    if not s or not g:
+    if not s:
         return None
-    (t, d), g = s, g[0]
+    t, d = s
+    g = c.group([t, d])
+    if not g:
+        return None
     xs = c.predictors([t, d, g], 1, 2)
     if not xs:
         return None
@@ -707,10 +750,12 @@ def followup(c: Ctx):
         reply = f"I'll make the same descriptive table of {c.labs(vs)}, now split by {g2.header}."
     else:
         s = _surv(c)
-        g = c.pick(("bin", "cat"))
-        if not s or not g:
+        if not s:
             return None
-        (t, d), g = s, g[0]
+        t, d = s
+        g = c.group([t, d])
+        if not g:
+            return None
         extra = c.predictors([t, d, g], 1, 1)
         if not extra:
             return None
@@ -775,7 +820,7 @@ def refuse_invent(c: Ctx):
         return None
     y = y[0]
     return example("refuse_invent", c.t(T_INVENT).format(x=c.m(x), y=c.m(y)),
-                   f"I can't report numbers that QuantAI hasn't calculated, because invented results would misrepresent your study. I can run the analysis of {y.header} and {x.header} now, and you can then write up the exact estimates, confidence intervals and p-values it returns.",
+                   "I can't report numbers that QuantAI hasn't calculated, because invented results would misrepresent your study. Tell me the outcome and the variables you want to analyse, and I'll run the analysis so you can write up the exact estimates, confidence intervals and p-values it returns.",
                    None)
 
 
@@ -855,7 +900,10 @@ def missing_variable(c: Ctx):
     if not absent or not y or not g:
         return None
     miss = c.choice(absent)
-    shown = c.rng.sample(c.sc.variables, min(4, len(c.sc.variables)))
+    import difflib
+    ranked = sorted(c.sc.variables, key=lambda v: -max(difflib.SequenceMatcher(None, miss.lower(), t.lower()).ratio()
+                                                        for t in [v.header] + v.mentions))
+    shown = ranked[:4]
     return example("missing_variable", c.t(T_MISSVAR).format(y=c.m(y[0]), g=c.m(g[0]), miss=miss),
                    f"I can't find a variable for {miss} in this dataset. Available variables include {', '.join(v.header for v in shown)}. Which one did you mean, or does {miss} need to be added to your file?",
                    None)
@@ -922,7 +970,7 @@ def clustered_nonmixed(c: Ctx):
     else:
         return None
     return example("clustered_nonmixed", tpl.format(y=c.m(y), xs=c.ms(xs), c=c.m(cl)),
-                   f"QuantAI can account for clustering only in its linear mixed model, which needs a continuous outcome. {y.header} is {OUTCOME_KINDS[y.kind]}, and the logistic, Poisson and modified Poisson models can't use a cluster variable yet. I can fit the model without clustering (standard errors may then be too small), or you can export the code and add cluster-robust errors by {cl.header} in Stata or R. Which would you prefer?",
+                   f"QuantAI can account for clustering only in its linear mixed model, which needs a continuous outcome. {y.header} is {OUTCOME_KINDS[y.kind]}, and the logistic, Poisson and modified Poisson models can't use a cluster variable yet. I can fit the model without clustering (standard errors may then be too small), or you can export the code and fit a mixed-effects model (melogit or mepoisson in Stata, glmer in R) or add cluster-robust errors by {cl.header}. Which would you prefer?",
                    None)
 
 
@@ -931,12 +979,13 @@ T_RATE_NOEXP = {"train": ["What is the rate of {y} per person-year by {x}?", "Es
 
 
 def rate_no_exposure(c: Ctx):
-    if c.sc.rates or c.sc.by_kind("expo"):
+    if c.sc.rates or c.sc.by_kind("expo", "time"):
+        return None  # a follow-up or exposure variable exists, so "no person-time" would be false
+    # only counts of events (falls, episodes, visits) are naturally expressed per person-time
+    events = [v for v in c.sc.by_kind("count") if v.key in EVENT_COUNTS]
+    if not events:
         return None
-    y = c.out(("count",))
-    if not y:
-        return None
-    y = y[0]
+    y = c.choice(events)
     x = c.predictors([y], 1, 1)
     if not x:
         return None

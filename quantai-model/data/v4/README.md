@@ -4,8 +4,8 @@ Training and held-out evaluation data for QuantAI's chat model. Built by [`../..
 
 | File | Rows | Rows with no action (answer, clarify or decline) | Research scenarios |
 |---|---:|---:|---:|
-| `train.jsonl` | 1,121 | 320 | 27 + QuantAI's example dataset |
-| `eval.jsonl` | 235 | 74 | 10 + QuantAI's example dataset |
+| `train.jsonl` | 1,124 | 320 | 27 + QuantAI's example dataset |
+| `eval.jsonl` | 236 | 73 | 10 + QuantAI's example dataset |
 
 ## What a row contains
 
