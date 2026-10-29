@@ -13,6 +13,7 @@ from typing import Any
 
 import torch
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -67,6 +68,23 @@ class ChatResponse(BaseModel):
     retrieved_knowledge: list[str] = Field(default_factory=list)
 
 app = FastAPI(title="QuantAI Local Specialist", version="0.1.0")
+# Set QUANTAI_CORS_ORIGINS to comma-separated exact web origins in deployment.
+# Do not use "*" for a public deployment.
+ALLOWED_ORIGINS = [
+    origin.strip().rstrip("/")
+    for origin in os.environ.get(
+        "QUANTAI_CORS_ORIGINS",
+        "http://localhost:8000,http://127.0.0.1:8000",
+    ).split(",")
+    if origin.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
+)
 _model = None
 _tokenizer = None
 _model_lock = threading.Lock()
