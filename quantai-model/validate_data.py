@@ -23,9 +23,11 @@ REGRESSION_MODELS = {"auto", "linear", "logistic", "modpoisson", "poisson", "ord
 
 
 def valid_action_item(item: Any) -> bool:
-    if not isinstance(item, dict) or item.get("type") not in ACTION_KEYS:
+    if not isinstance(item, dict) or not isinstance(item.get("type"), str):
         return False
     kind = item["type"]
+    if kind not in ACTION_KEYS:
+        return False
     if set(item) != ACTION_KEYS[kind]:
         return False
     if kind == "describe":
@@ -35,7 +37,7 @@ def valid_action_item(item: Any) -> bool:
     if kind == "regression":
         return (isinstance(item["outcome"], str) and isinstance(item["predictors"], list)
                 and all(isinstance(v, str) for v in item["predictors"])
-                and item["model"] in REGRESSION_MODELS
+                and isinstance(item["model"], str) and item["model"] in REGRESSION_MODELS
                 and (item["cluster"] is None or isinstance(item["cluster"], str)))
     if kind == "survival":
         return (isinstance(item["time"], str) and isinstance(item["event"], str)
@@ -47,7 +49,7 @@ def valid_action_item(item: Any) -> bool:
                 and isinstance(item["value"], str) and isinstance(item["horizon"], int)
                 and not isinstance(item["horizon"], bool) and 1 <= item["horizon"] <= 120)
     if kind == "open":
-        return item["tool"] in OPEN_TOOLS
+        return isinstance(item["tool"], str) and item["tool"] in OPEN_TOOLS
     return kind in {"check", "fix", "report"}
 
 
