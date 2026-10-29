@@ -146,7 +146,9 @@ def valid_action_item(item: Any) -> bool:
     if not isinstance(item, dict) or item.get("type") not in ACTION_FIELDS:
         return False
     action_type = item["type"]
-    if set(item) - ACTION_FIELDS[action_type]:
+    # Every action has an exact contract: required keys cannot be omitted and
+    # unrecognised keys cannot be passed to the deterministic engine.
+    if set(item) != ACTION_FIELDS[action_type]:
         return False
     if action_type == "describe":
         return isinstance(item.get("vars"), list) and all(isinstance(v, str) for v in item["vars"]) and (item.get("group") is None or isinstance(item.get("group"), str))
