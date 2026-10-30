@@ -147,6 +147,13 @@ def main() -> None:
     parser.add_argument("--hub-model-id", default="")
     args = parser.parse_args()
 
+    if not torch.cuda.is_available():
+        raise SystemExit(
+            "GPU training was not started: CUDA is unavailable. In Colab select "
+            "Runtime > Change runtime type > Hardware accelerator > GPU, reconnect, "
+            "and rerun. Run validate_data.py and pytest separately for CPU-safe checks."
+        )
+
     train_rows = read_jsonl(args.train)
     eval_rows = read_jsonl(args.eval)
     n_train_file, n_eval_file = len(train_rows), len(eval_rows)
