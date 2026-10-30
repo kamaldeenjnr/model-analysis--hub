@@ -128,7 +128,7 @@ def main() -> None:
                         help="Maximum tokens per example (prompt + answer). Rows longer than this stop training.")
     parser.add_argument("--prompt-version", default=prompting.DEFAULT_PROMPT_VERSION, choices=sorted(prompting.SYSTEM_PROMPTS),
                         help="System prompt version; serve.py must use the same QUANTAI_PROMPT_VERSION.")
-    parser.add_argument("--knowledge-db", type=Path, default=ROOT / "knowledge.sqlite3",
+    parser.add_argument("--knowledge-db", type=Path, default=ROOT / "knowledge_index.json",
                         help="Retrieval index built from the knowledge files, as serve.py uses.")
     parser.add_argument("--epochs", type=float, default=3)
     parser.add_argument("--learning-rate", type=float, default=2e-4)

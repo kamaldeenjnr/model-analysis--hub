@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 import re
-import sqlite3
 import threading
 from pathlib import Path
 from typing import Any
@@ -23,7 +22,7 @@ import prompting  # noqa: E402  shared with train_lora.py and evaluate.py
 
 ROOT = Path(__file__).resolve().parent
 MODEL_PATH = Path(os.environ.get("QUANTAI_MODEL_PATH", ROOT / "outputs" / "quantai-merged-model-v3"))
-DB_PATH = Path(os.environ.get("QUANTAI_KNOWLEDGE_DB", ROOT / "knowledge.sqlite3"))
+DB_PATH = Path(os.environ.get("QUANTAI_KNOWLEDGE_DB", ROOT / "knowledge_index.json"))
 MAX_INPUT_CHARS = int(os.environ.get("QUANTAI_MAX_INPUT_CHARS", "10000"))
 MAX_NEW_TOKENS = int(os.environ.get("QUANTAI_MAX_NEW_TOKENS", "500"))
 MAX_INPUT_TOKENS = int(os.environ.get("QUANTAI_MAX_INPUT_TOKENS", "3584"))

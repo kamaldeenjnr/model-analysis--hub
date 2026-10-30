@@ -28,7 +28,7 @@ def test_knowledge_base_is_split_into_sections():
 
 
 def test_retrieval_finds_relevant_sections(tmp_path):
-    db = tmp_path / "k.sqlite3"
+    db = tmp_path / "k.json"
     assert prompting.initialise_knowledge(prompting.knowledge_sources(ROOT), db) > 20
     titles = [r["title"] for r in prompting.retrieve(db, "Estimate adjusted prevalence ratios with modified Poisson")]
     assert any("Poisson" in t for t in titles)
@@ -36,7 +36,7 @@ def test_retrieval_finds_relevant_sections(tmp_path):
 
 
 def test_v4_row_builds_exactly_the_api_messages(tmp_path):
-    db = tmp_path / "k.sqlite3"
+    db = tmp_path / "k.json"
     prompting.initialise_knowledge(prompting.knowledge_sources(ROOT), db)
     row = rows("train.jsonl")[0]
     built = prompting.messages_for_row(row, db, "v4")
@@ -201,3 +201,20 @@ def test_serving_prompt_follows_the_model(tmp_path):
     import pytest
     with pytest.raises(ValueError):
         prompting.resolve_prompt_version(tmp_path, "v9")
+
+
+def test_retrieval_does_not_need_sqlite(tmp_path):
+    """Colab's training process loaded a libsqlite3 without FTS5 after importing torch.
+    Retrieval must work with no usable sqlite3 at all."""
+    import subprocess
+    code = (
+        "import sys; sys.modules['sqlite3'] = None; sys.modules['_sqlite3'] = None\n"
+        f"sys.path.insert(0, {str(ROOT)!r})\n"
+        "import pathlib, prompting\n"
+        f"db = pathlib.Path({str(tmp_path / 'k.json')!r})\n"
+        f"assert prompting.initialise_knowledge(prompting.knowledge_sources(pathlib.Path({str(ROOT)!r})), db) > 20\n"
+        "assert prompting.retrieve(db, 'prevalence ratios modified Poisson')\n"
+        "print('ok')\n"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert result.returncode == 0 and "ok" in result.stdout, result.stderr

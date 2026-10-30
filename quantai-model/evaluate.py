@@ -113,7 +113,7 @@ def main() -> None:
     parser.add_argument("--cases", type=Path, default=ROOT / "data" / "v4" / "eval.jsonl")
     parser.add_argument("--report", type=Path, default=ROOT / "outputs" / "evaluation.json")
     parser.add_argument("--prompt-version", default=prompting.DEFAULT_PROMPT_VERSION, choices=sorted(prompting.SYSTEM_PROMPTS))
-    parser.add_argument("--knowledge-db", type=Path, default=ROOT / "knowledge.sqlite3")
+    parser.add_argument("--knowledge-db", type=Path, default=ROOT / "knowledge_index.json")
     parser.add_argument("--precision", choices=["4bit", "float16"], default="4bit",
                         help="GPU loading precision; use the same value for every model you compare.")
     parser.add_argument("--max-new-tokens", type=int, default=512)

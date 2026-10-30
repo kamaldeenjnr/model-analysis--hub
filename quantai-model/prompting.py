@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import re
-import sqlite3
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -100,50 +99,95 @@ def split_sections(text: str, source: str = "") -> list[tuple[str, str]]:
     return sections
 
 
+_WORD = re.compile(r"[\w-]{3,}")
+BM25_K1, BM25_B = 1.2, 0.75  # the same defaults as SQLite FTS5's bm25()
+SNIPPET_TOKENS = 12
+
+
+def _tokens(text: str) -> list[str]:
+    return _WORD.findall(text.casefold())
+
+
 def initialise_knowledge(sources: Iterable[Path], db_path: Path) -> int:
-    """(Re)build the SQLite FTS index when the knowledge text changes. Returns the section count."""
+    """(Re)build the knowledge index when the knowledge text changes. Returns the section count.
+
+    The index is a small JSON file searched in pure Python (BM25), so retrieval is identical
+    in training, evaluation and serving, and does not depend on SQLite being built with FTS5
+    (Colab's training process can load a libsqlite3 without it after importing torch)."""
+    import json as _json
     sources = list(sources)
     texts = [(path.name, path.read_text(encoding="utf-8")) for path in sources]
     digest = hashlib.sha256("\n\0".join(name + "\n" + text for name, text in texts).encode("utf-8")).hexdigest()
+    db_path = Path(db_path)
+    if db_path.exists():
+        try:
+            index = _json.loads(db_path.read_text(encoding="utf-8"))
+            if index.get("sha256") == digest:
+                return len(index["sections"])
+        except (ValueError, KeyError, UnicodeDecodeError):
+            pass  # an old SQLite file or a damaged index: rebuild it
+    sections = [{"title": title, "body": body} for name, text in texts for title, body in split_sections(text, name)]
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(db_path) as conn:
-        conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS knowledge USING fts5(title, body)")
-        conn.execute("CREATE TABLE IF NOT EXISTS knowledge_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        previous = conn.execute("SELECT value FROM knowledge_meta WHERE key='sha256'").fetchone()
-        if previous and previous[0] == digest:
-            return conn.execute("SELECT count(*) FROM knowledge").fetchone()[0]
-        conn.execute("DELETE FROM knowledge")
-        count = 0
-        for name, text in texts:
-            for title, body in split_sections(text, name):
-                conn.execute("INSERT INTO knowledge(title, body) VALUES (?, ?)", (title, body))
-                count += 1
-        conn.execute(
-            "INSERT INTO knowledge_meta(key, value) VALUES('sha256', ?) "
-            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-            (digest,),
-        )
-        return count
+    tmp = db_path.with_suffix(db_path.suffix + ".tmp")
+    tmp.write_text(_json.dumps({"sha256": digest, "sections": sections}, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(db_path)
+    return len(sections)
+
+
+def _snippet(body: str, terms: set[str]) -> str:
+    """A short excerpt around the densest run of query terms, with matches in [brackets]."""
+    spans = [(m.start(), m.end(), m.group(0).casefold()) for m in _WORD.finditer(body)]
+    if not spans:
+        return body[:120]
+    best, best_hits = 0, -1
+    for i in range(len(spans)):
+        hits = sum(1 for _, _, w in spans[i:i + SNIPPET_TOKENS] if w in terms)
+        if hits > best_hits:
+            best, best_hits = i, hits
+    window = spans[best:best + SNIPPET_TOKENS]
+    start, end = window[0][0], window[-1][1]
+    text, pos, out = body[start:end], 0, []
+    for s0, e0, w in window:
+        s0, e0 = s0 - start, e0 - start
+        out.append(text[pos:s0])
+        out.append(f"[{text[s0:e0]}]" if w in terms else text[s0:e0])
+        pos = e0
+    out.append(text[pos:])
+    return (" … " if best > 0 else "") + "".join(out) + (" … " if best + SNIPPET_TOKENS < len(spans) else "")
 
 
 def retrieve(db_path: Path, query: str, limit: int = 3) -> list[dict[str, str]]:
-    """Full-text search over the knowledge index. User text is quoted so it cannot become FTS syntax."""
+    """BM25 search over the knowledge index (title and body). User text is only tokenised, never executed."""
+    import json as _json
+    import math
+    db_path = Path(db_path)
     if not db_path.exists():
         return []
-    words = re.findall(r"[\w-]{3,}", query.casefold())
-    if not words:
-        return []
-    expression = " OR ".join('"' + word.replace('"', '""') + '"' for word in words[:12])
     try:
-        with sqlite3.connect(db_path) as conn:
-            rows = conn.execute(
-                "SELECT title, snippet(knowledge, 1, '[', ']', ' … ', 12) "
-                "FROM knowledge WHERE knowledge MATCH ? ORDER BY rank LIMIT ?",
-                (expression, limit),
-            ).fetchall()
-        return [{"title": row[0], "excerpt": row[1]} for row in rows]
-    except sqlite3.Error:
+        sections = _json.loads(db_path.read_text(encoding="utf-8"))["sections"]
+    except (ValueError, KeyError, UnicodeDecodeError):
         return []
+    terms = list(dict.fromkeys(_tokens(query)))[:12]
+    if not terms or not sections:
+        return []
+    docs = [_tokens(sec["title"] + " " + sec["body"]) for sec in sections]
+    avg = sum(len(d) for d in docs) / len(docs)
+    n = len(docs)
+    scores = []
+    for index, doc in enumerate(docs):
+        score = 0.0
+        for term in terms:
+            tf = doc.count(term)
+            if not tf:
+                continue
+            df = sum(1 for d in docs if term in d)
+            idf = math.log(1 + (n - df + 0.5) / (df + 0.5))
+            score += idf * tf * (BM25_K1 + 1) / (tf + BM25_K1 * (1 - BM25_B + BM25_B * len(doc) / avg))
+        if score > 0:
+            scores.append((-score, index))
+    scores.sort()
+    found = set(terms)
+    return [{"title": sections[i]["title"], "excerpt": _snippet(sections[i]["body"], found)} for _, i in scores[:limit]]
 
 
 def retrieval_query(message: str) -> str:

@@ -287,7 +287,7 @@ def test_chat_handler_sends_the_same_messages_as_training(monkeypatch, tmp_path)
         def generate(self, **kwargs):
             return torch.tensor([[1, 2, 3]])
 
-    db = tmp_path / "k.sqlite3"
+    db = tmp_path / "k.json"
     monkeypatch.setattr(module, "DB_PATH", db)
     module.initialise_knowledge()
     monkeypatch.setattr(module, "load_model", lambda: None)
