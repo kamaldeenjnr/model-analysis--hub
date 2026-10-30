@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+quantai-model/outputs/
+quantai-model/knowledge.sqlite3
+quantai-model/knowledge_index.json

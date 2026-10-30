@@ -522,14 +522,18 @@ const Stats = (function () {
   function glm(X, y, names, family, opts) {
     opts = opts || {};
     const F = FAMILIES[family], n = X.length, Xd = X.map(r => [1, ...r]), p = Xd[0].length;
+    const offsetLog = family === "poisson" && Array.isArray(opts.offsetLog) ? opts.offsetLog : new Array(n).fill(0);
+    if (offsetLog.length !== n || offsetLog.some(v => !Number.isFinite(v))) throw new Error("Poisson offset must contain one finite log-exposure value per analysis row.");
+    if (family !== "poisson" && offsetLog.some(v => v !== 0)) throw new Error("Exposure offsets are supported only for Poisson regression.");
+    const linearPredictor = (row, i, b) => dot(row, b) + (family === "poisson" ? offsetLog[i] : 0);
     let beta = new Array(p).fill(0);
-    if (family === "poisson") beta[0] = Math.log(Math.max(mean(y), 1e-8));
+    if (family === "poisson") beta[0] = Math.log(Math.max(y.reduce((a, v) => a + v, 0) / offsetLog.reduce((a, v) => a + Math.exp(v), 0), 1e-8));
     else { const m = Math.min(Math.max(mean(y), 1e-6), 1 - 1e-6); beta[0] = Math.log(m / (1 - m)); }
     let converged = false, inv = null, mu = null, llOld = -Infinity, iter = 0;
-    const llOf = b => { let s = 0; for (let i = 0; i < n; i++) s += F.ll(y[i], F.inv(dot(Xd[i], b))); return s; };
+    const llOf = b => { let s = 0; for (let i = 0; i < n; i++) s += F.ll(y[i], F.inv(linearPredictor(Xd[i], i, b))); return s; };
     llOld = llOf(beta);
     for (iter = 0; iter < 100; iter++) {
-      mu = Xd.map(r => F.inv(dot(r, beta)));
+      mu = Xd.map((r, i) => F.inv(linearPredictor(r, i, beta)));
       const W = mu.map(m => Math.max(F.varf(m), 1e-10));
       inv = matInverse(xtwx(Xd, W));
       const grad = new Array(p).fill(0);
@@ -541,7 +545,7 @@ const Stats = (function () {
       llOld = ll;
       if (change < 1e-10 * (Math.abs(ll) + 1e-8) || Math.max(...step.map(Math.abs)) < 1e-9) { converged = true; break; }
     }
-    mu = Xd.map(r => F.inv(dot(r, beta)));
+    mu = Xd.map((r, i) => F.inv(linearPredictor(r, i, beta)));
     inv = matInverse(xtwx(Xd, mu.map(m => Math.max(F.varf(m), 1e-10))));
     let cov = inv;
     if (opts.robust) {
@@ -554,8 +558,15 @@ const Stats = (function () {
     const coefs = beta.map((b, i) => { const se = Math.sqrt(Math.max(cov[i][i], 0)), z = b / se;
       return { name: i === 0 ? "Intercept" : names[i - 1], coef: b, se, z, p: clamp01(2 * normSf(Math.abs(z))), exp: Math.exp(b), expLow: Math.exp(b - q * se), expHigh: Math.exp(b + q * se), ciLow: b - q * se, ciHigh: b + q * se }; });
     const ll = llOf(beta);
-    // null model log-likelihood
-    const ym = mean(y); let ll0 = 0; for (let i = 0; i < n; i++) ll0 += F.ll(y[i], ym);
+    // Null model retains the same offset so the likelihood-ratio comparison is valid.
+    let ll0 = 0;
+    if (family === "poisson") {
+      const baseRate = Math.max(y.reduce((a, v) => a + v, 0) / offsetLog.reduce((a, v) => a + Math.exp(v), 0), 1e-12);
+      for (let i = 0; i < n; i++) ll0 += F.ll(y[i], baseRate * Math.exp(offsetLog[i]));
+    } else {
+      const ym = mean(y);
+      for (let i = 0; i < n; i++) ll0 += F.ll(y[i], ym);
+    }
     const lr = 2 * (ll - ll0), k = p - 1;
     let pearsonChi2 = 0; for (let i = 0; i < n; i++) pearsonChi2 += (y[i] - mu[i]) ** 2 / Math.max(F.varf(mu[i]), 1e-12);
     const sep = family === "binomial" && (beta.some((b, i) => i > 0 && Math.abs(b) > 15) || mu.filter(m => m < 1e-8 || m > 1 - 1e-8).length > 0.05 * n || !converged);
@@ -1546,8 +1557,17 @@ const Analysis = (function () {
     opts = opts || {}; const alpha = opts.alpha || RULES.alpha;
     if (!preds.length) throw userError("Choose at least one predictor.");
     if (preds.some(p => p.name === y.name)) throw userError("The outcome cannot also be a predictor.");
-    const rows = D.completeRows(ds, [y, ...preds]);
-    const decision = [], warnings = missingWarn(ds, rows, [y, ...preds]);
+    const offset = opts.offset || null;
+    if (offset && opts.model !== "poisson") throw userError("An exposure offset requires Poisson regression. Select the Poisson model explicitly.");
+    if (offset && !["continuous", "count"].includes(offset.type)) throw userError("The exposure offset must be a numeric continuous or count variable.");
+    const modelVars = [y, ...preds, ...(offset ? [offset] : [])];
+    const rows = D.completeRows(ds, modelVars);
+    const decision = [], warnings = missingWarn(ds, rows, modelVars);
+    const offsetLog = offset ? rows.map(i => {
+      const exposure = Number(offset.values[i]);
+      if (!Number.isFinite(exposure) || exposure <= 0) throw userError(`Exposure offset "${lab(offset)}" must be greater than zero for every analysed row.`);
+      return Math.log(exposure);
+    }) : null;
     let model = opts.model || "auto";
     const yIsBin = y.type === "binary";
     let yv;
@@ -1585,7 +1605,7 @@ const Analysis = (function () {
     let fit;
     try {
       if (model === "linear") fit = S.ols(X, yv, names);
-      else fit = S.glm(X, yv, names, model === "logistic" ? "binomial" : "poisson", { robust: model === "modpoisson" });
+      else fit = S.glm(X, yv, names, model === "logistic" ? "binomial" : "poisson", { robust: model === "modpoisson", offsetLog: model === "poisson" ? offsetLog : undefined });
     } catch (e) {
       if (e.code === "singular") throw userError("The predictors are perfectly collinear (one is an exact combination of others, or a category has no variation). Remove a predictor or merge categories.");
       throw e;
@@ -1603,7 +1623,7 @@ const Analysis = (function () {
     } else if (model === "poisson") {
       const od = fit.dispersion > 1.5;
       decision.push({ rule: "Overdispersion", detail: `Pearson χ²/df = ${f(fit.dispersion)} → ${od ? "overdispersed: robust (sandwich) standard errors used; a negative binomial model is the usual alternative" : "no overdispersion"}`, ok: !od });
-      if (od && opts.robustAuto !== false) { fit = S.glm(X, yv, names, "poisson", { robust: true }); robust = true; }
+      if (od && opts.robustAuto !== false) { fit = S.glm(X, yv, names, "poisson", { robust: true, offsetLog }); robust = true; }
       const zerosObs = yv.filter(v => v === 0).length, zerosExp = S.sum(fit.fitted.map(m => Math.exp(-m)));
       if (zerosObs > 1.5 * zerosExp && zerosObs > 10) decision.push({ rule: "Excess zeros", detail: `${zerosObs} zeros observed vs ${f(zerosExp, 0)} expected → consider a zero-inflated model`, ok: false });
     } else {
@@ -1625,11 +1645,13 @@ const Analysis = (function () {
     if (preds.length > 1) {
       crude = {};
       preds.forEach(pv => {
-        const rr = D.completeRows(ds, [y, pv]);
+        const crudeVars = [y, pv, ...(offset ? [offset] : [])];
+        const rr = D.completeRows(ds, crudeVars);
         const dd = designFor(ds, [pv], rr);
         const yy = rr.map(i => yIsBin ? (y.values[i] === y.levels[1] ? 1 : 0) : Number(y.values[i]));
+        const crudeOffsetLog = offset ? rr.map(i => Math.log(Number(offset.values[i]))) : null;
         try {
-          const ff = model === "linear" ? S.ols(dd.X, yy, dd.names, { robust }) : S.glm(dd.X, yy, dd.names, model === "logistic" ? "binomial" : "poisson", { robust });
+          const ff = model === "linear" ? S.ols(dd.X, yy, dd.names, { robust }) : S.glm(dd.X, yy, dd.names, model === "logistic" ? "binomial" : "poisson", { robust, offsetLog: model === "poisson" ? crudeOffsetLog : undefined });
           ff.coefs.slice(1).forEach(c => crude[c.name] = c);
         } catch (e) { /* leave blank */ }
       });
@@ -1653,6 +1675,7 @@ const Analysis = (function () {
 
     // write-up
     const sigC = fit.coefs.slice(1).filter(c => c.p < alpha);
+    if (offset) decision.push({ rule: "Exposure offset", detail: `log(${lab(offset)}) was included as a fixed offset; rate ratios account for unequal exposure time. The offset was not estimated as an ordinary predictor coefficient.`, ok: true });
     const adj = preds.length > 1 ? " after adjusting for the other variables in the model" : "";
     let writeup;
     if (model === "linear") {
@@ -2290,13 +2313,15 @@ const Codegen = (function () {
     const yv = s.model === "logistic" || s.model === "modpoisson" ? binName(y) : y.name;
     const isCat = v => CATT.includes(v.type);
     const o = [], name = { linear: "Multiple linear regression", logistic: "Binary logistic regression", poisson: "Poisson regression", modpoisson: "Modified Poisson regression (prevalence ratios, robust SE)" }[s.model];
-    const allVars = [yv, ...preds.map(v => isCat(v) ? catName(v) : v.name)];
+    const offset = s.offset ? by(ds, s.offset) : null;
+    const allVars = [yv, ...preds.map(v => isCat(v) ? catName(v) : v.name), ...(offset ? [offset.name] : [])];
     if (lang === "stata") {
       const rhs = preds.map(v => isCat(v) ? `i.${catName(v)}` : v.name).join(" ");
+      const offsetOpt = offset ? `, exposure(${offset.name})` : "";
       o.push(`preserve`);
       if (s.crude) {
         const cmd = s.model === "linear" ? "regress" : s.model === "logistic" ? "logistic" : "poisson";
-        const opt = s.model === "linear" ? (s.robust ? ", vce(robust)" : "") : s.model === "logistic" ? "" : `, irr${s.robust ? " vce(robust)" : ""}`;
+        const opt = s.model === "linear" ? (s.robust ? ", vce(robust)" : "") : s.model === "logistic" ? "" : `, ${offset ? `exposure(${offset.name}) ` : ""}irr${s.robust ? " vce(robust)" : ""}`;
         o.push(cmt(lang, "Crude (unadjusted) estimates, each on all rows with that predictor and the outcome"), ...preds.map(v => `${cmd} ${yv} ${isCat(v) ? "i." + catName(v) : v.name}${opt}`));
       }
       o.push(cmt(lang, "Complete cases for the full model"), `keep if !missing(${allVars.join(", ")})`);
@@ -2309,9 +2334,9 @@ const Codegen = (function () {
         o.push(cmt(lang, "Adjusted odds ratios"), `logistic ${yv} ${rhs}`, `estat gof, group(10) table   // Hosmer-Lemeshow (Stata's grouping of ties can differ slightly)`, `lroc, nograph`);
       } else {
         o.push(cmt(lang, "VIF depends only on the predictors"), `quietly regress ${yv} ${rhs}`, `estat vif`);
-        if (s.model === "poisson") o.push(`quietly poisson ${yv} ${rhs}`, `predict double _mu, n`, `generate double _pr = (${yv} - _mu)^2/_mu`, `quietly summarize _pr`, `display "Pearson chi2/df (dispersion) = " r(sum)/(e(N) - e(k))`);
+        if (s.model === "poisson") o.push(`quietly poisson ${yv} ${rhs}${offsetOpt}`, `predict double _mu, n`, `generate double _pr = (${yv} - _mu)^2/_mu`, `quietly summarize _pr`, `display "Pearson chi2/df (dispersion) = " r(sum)/(e(N) - e(k))`);
         const vce = s.robust ? " vce(robust)" : "";
-        o.push(cmt(lang, s.robust ? "Robust SEs (Stata multiplies by n/(n-1) — results differ from the app only in the 3rd-4th decimal)" : "Final model"), `poisson ${yv} ${rhs}, irr${vce}`);
+        o.push(cmt(lang, s.offset ? `Poisson rate model with exposure offset ${s.offset}` : (s.robust ? "Robust SEs (Stata multiplies by n/(n-1) — results differ from the app only in the 3rd-4th decimal)" : "Final model")), `poisson ${yv} ${rhs}${offsetOpt}${offset ? " " : ","}irr${vce}`);
       }
       o.push(`restore`);
     } else if (lang === "python") {
@@ -2319,7 +2344,7 @@ const Codegen = (function () {
       o.push(`d = df[[${allVars.map(qJ).join(", ")}]].dropna()`);
       const fitExpr = (rhsX, data = "d") => s.model === "linear" ? `smf.ols("${yv} ~ ${rhsX}", data=${data}).fit(${s.robust ? 'cov_type="HC1"' : ""})`
         : s.model === "logistic" ? `smf.logit("${yv} ~ ${rhsX}", data=${data}).fit(disp=0)`
-        : `smf.glm("${yv} ~ ${rhsX}", data=${data}, family=sm.families.Poisson()).fit(${s.robust ? 'cov_type="HC0"' : ""})`;
+        : `smf.glm("${yv} ~ ${rhsX}", data=${data}, family=sm.families.Poisson()${offset ? `, offset=np.log(${data}[${qJ(offset.name)}])` : ""}).fit(${s.robust ? 'cov_type="HC0"' : ""})`;
       if (s.model === "linear") {
         o.push(`ols0 = smf.ols("${yv} ~ ${rhs}", data=d).fit()`, `X = ols0.model.exog`,
           `print("VIF:", {n: round(variance_inflation_factor(X, i), 2) for i, n in enumerate(ols0.model.exog_names) if n != "Intercept"})`,
@@ -2331,7 +2356,7 @@ const Codegen = (function () {
       }
       if (s.crude) {
         o.push("# Crude (unadjusted) estimates, one predictor at a time, on all rows with that predictor and the outcome");
-        preds.forEach(v => { const vn = isCat(v) ? catName(v) : v.name, t = isCat(v) ? `C(${vn})` : vn, dd = `df[[${qJ(yv)}, ${qJ(vn)}]].dropna()`; o.push(s.model === "linear" ? `print(${fitExpr(t, dd)}.summary().tables[1])` : `m = ${fitExpr(t, dd)}; print(pd.DataFrame({"ratio": np.exp(m.params), "lo": np.exp(m.conf_int()[0]), "hi": np.exp(m.conf_int()[1]), "p": m.pvalues}).round(4))`); });
+        preds.forEach(v => { const vn = isCat(v) ? catName(v) : v.name, t = isCat(v) ? `C(${vn})` : vn, dd = `df[[${[yv, vn, ...(offset ? [offset.name] : [])].map(qJ).join(", ")}]].dropna()`; o.push(s.model === "linear" ? `print(${fitExpr(t, dd)}.summary().tables[1])` : `m = ${fitExpr(t, dd)}; print(pd.DataFrame({"ratio": np.exp(m.params), "lo": np.exp(m.conf_int()[0]), "hi": np.exp(m.conf_int()[1]), "p": m.pvalues}).round(4))`); });
       }
       o.push(`# Final model: ${name}`, `model = ${fitExpr(rhs)}`, `print(model.summary())`);
       if (s.model !== "linear") o.push(`print(pd.DataFrame({"${({ logistic: "OR", poisson: "IRR", modpoisson: "PR" })[s.model]}": np.exp(model.params), "2.5%": np.exp(model.conf_int()[0]), "97.5%": np.exp(model.conf_int()[1]), "p": model.pvalues}).round(4))`);
@@ -2342,6 +2367,7 @@ const Codegen = (function () {
         `u = stats.mannwhitneyu(p[yy == 1], p[yy == 0]).statistic; print(f"AUC = {u/((yy == 1).sum()*(yy == 0).sum()):.3f}")`);
     } else if (lang === "r") {
       const rhs = preds.map(v => isCat(v) ? catName(v) : v.name).join(" + ");
+      const formulaRhs = offset ? `${rhs} + offset(log(${offset.name}))` : rhs;
       o.push(`d <- na.omit(dat[, c(${allVars.map(qJ).join(", ")})])`,
         `vif_base <- function(f, data) { X <- model.matrix(f, data)[, -1, drop = FALSE]; if (ncol(X) < 2) return(NA); setNames(sapply(seq_len(ncol(X)), function(j) 1/(1 - summary(lm(X[, j] ~ X[, -j]))$r.squared)), colnames(X)) }`,
         `round(vif_base(~ ${rhs}, d), 2)  # VIF`);
@@ -2355,8 +2381,8 @@ const Codegen = (function () {
       } else {
         const fam = s.model === "logistic" ? "binomial" : "poisson";
         o.push(`ratio_table <- function(fit, robust = FALSE) { b <- coef(fit); V <- vcov(fit); if (robust) { X <- model.matrix(fit); V <- V %*% crossprod(X * (fit$y - fitted(fit))) %*% V }; se <- sqrt(diag(V)); round(cbind(ratio = exp(b), lo = exp(b - 1.959964*se), hi = exp(b + 1.959964*se), p = 2*pnorm(-abs(b/se))), 4) }`);
-        if (s.crude) o.push("# Crude ratios (all rows with that predictor and the outcome)", ...preds.map(v => { const vn = isCat(v) ? catName(v) : v.name; return `ratio_table(glm(${yv} ~ ${vn}, family = ${fam}, data = na.omit(dat[, c("${yv}", "${vn}")])), robust = ${s.robust ? "TRUE" : "FALSE"})`; }));
-        o.push(`# Final model: ${name}`, `fit <- glm(${yv} ~ ${rhs}, family = ${fam}, data = d)`, `summary(fit)`, `ratio_table(fit, robust = ${s.robust ? "TRUE" : "FALSE"})  # Wald CIs${s.robust ? ", robust (HC0) SEs" : ""}`);
+        if (s.crude) o.push("# Crude ratios (all rows with that predictor and the outcome)", ...preds.map(v => { const vn = isCat(v) ? catName(v) : v.name; const cols = [yv, vn, ...(offset ? [offset.name] : [])].map(qJ).join(", "); const crudeRhs = offset ? `${vn} + offset(log(${offset.name}))` : vn; return `ratio_table(glm(${yv} ~ ${crudeRhs}, family = ${fam}, data = na.omit(dat[, c(${cols})])), robust = ${s.robust ? "TRUE" : "FALSE"})`; }));
+        o.push(`# Final model: ${name}`, `fit <- glm(${yv} ~ ${formulaRhs}, family = ${fam}, data = d)`, `summary(fit)`, `ratio_table(fit, robust = ${s.robust ? "TRUE" : "FALSE"})  # Wald CIs${s.robust ? ", robust (HC0) SEs" : ""}`);
         if (s.model === "poisson") o.push(`cat("Pearson chi2/df (dispersion) =", round(sum(residuals(fit, type = "pearson")^2) / df.residual(fit), 2), "\\n")`);
         if (s.model === "logistic") o.push(`# Hosmer-Lemeshow (same grouping as ResourceSelection::hoslem.test, g = 10)`,
           `p <- fitted(fit); br <- unique(quantile(p, seq(0, 1, .1))); g <- cut(p, br, include.lowest = TRUE)`,
@@ -3307,7 +3333,7 @@ function runAnalysis(kind, p) {
     let model = p.model || "auto";
     if (model === "auto") model = y.type === "ordinal" ? "ordinal" : y.type === "categorical" ? "multinomial" : (p.cluster && ["continuous", "count"].includes(y.type) && y.type === "continuous") ? "mixed" : "auto";
     if (["ordinal", "multinomial", "mixed"].includes(model)) { const r = Analysis.regressionExt(S.ds, y, p.preds.map(V).filter(Boolean), Object.assign(opts, { model, cluster: p.cluster || null })); if (p.model === "auto") r.decision.unshift({ rule: "Model from outcome type", detail: `"${vlabel(y)}" is ${y.type}${model === "mixed" ? " with a cluster variable" : ""} → ${r.method.toLowerCase()}.` }); return r; }
-    return Analysis.regression(S.ds, y, p.preds.map(V).filter(Boolean), Object.assign(opts, { model }));
+    return Analysis.regression(S.ds, y, p.preds.map(V).filter(Boolean), Object.assign(opts, { model, offset: p.offset ? V(p.offset) : null }));
   }
   if (kind === "survival") {
     if (!V(p.time) || !V(p.event)) throw Object.assign(new Error("Choose the follow-up time and the event variable."), { user: true });
@@ -3791,24 +3817,40 @@ const _loadDatasetBase = loadDataset;
 loadDataset = function () { S.fc = { date: "", value: "", h: "", res: null, err: null }; return _loadDatasetBase.apply(this, arguments); };
 
 /* =====================================================================
-   AI assistant (website build): answers through the Model Analysis Hub
-   Cloudflare worker (Groq). Only statistical summaries and results are
-   sent — never the uploaded file. Every number still comes from the
-   deterministic engine; the assistant only explains.
+   AI assistant (website build): uses the existing Model Analysis Hub
+   worker by default, or the opt-in local QuantAI API when configured.
+   Only statistical summaries and results are sent — never the uploaded
+   file. Every number still comes from the deterministic engine.
    ===================================================================== */
 const AI_URL = "https://mah-assistant.kamalamadu8.workers.dev";
-const AI_PRIVACY = "Your question and a statistical summary (never your file) are sent to the Model Analysis Hub assistant. Numbers come from QuantAI's own calculations; the assistant only explains them, so check anything important.";
+const LOCAL_AI_URL = typeof window.QUANTAI_LOCAL_AI_URL === "string" ? window.QUANTAI_LOCAL_AI_URL.trim().replace(/\/+$/, "") : "";
+const AI_PRIVACY = LOCAL_AI_URL ? "Your question and a statistical summary (never your file) are sent to the configured QuantAI local service. Numbers come from QuantAI's own calculations; check important results." : "Your question and a statistical summary (never your file) are sent to the Model Analysis Hub assistant. Numbers come from QuantAI's own calculations; the assistant only explains them, so check anything important.";
 S.explain = {};
 
 const aiErrText = code => ({ rate_limited: "You've asked a lot of questions in a short time. Wait a few minutes and try again.", busy: "The assistant is busy right now. Try again in a minute.", not_configured: "The assistant isn't set up yet.", network: "The assistant couldn't be reached. Check your connection; all other tools still work." })[code] || "The assistant couldn't answer right now. All other tools still work.";
 async function askAI(mode, context, messages) {
   let res;
   try {
-    res = await fetch(AI_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, context: context.slice(0, 11900), messages: messages.slice(-10).map(m => ({ role: m.role, content: m.content.slice(0, 590) })) }) });
+    if (LOCAL_AI_URL) {
+      const last = messages[messages.length - 1] || {};
+      res = await fetch(LOCAL_AI_URL + "/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: String(last.content || mode).slice(0, 9500),
+          context: String(context || "").slice(0, 9000),
+          history: messages.slice(0, -1).slice(-8).map(m => ({
+            role: m.role, content: String(m.content || "").slice(0, 1000)
+          }))
+        })
+      });
+    } else {
+      res = await fetch(AI_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode, context: context.slice(0, 11900), messages: messages.slice(-10).map(m => ({ role: m.role, content: m.content.slice(0, 590) })) }) });
+    }
   } catch (e) { throw Object.assign(new Error("network"), { code: "network" }); }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || !data.reply) throw Object.assign(new Error(data.error || "failed"), { code: data.error || "failed" });
-  return data.reply;
+  if (!res.ok || typeof data.reply !== "string" || !data.reply) throw Object.assign(new Error(data.detail || data.error || "failed"), { code: data.error || "failed" });
+  return LOCAL_AI_URL ? JSON.stringify({ reply: data.reply, action: data.action ?? null }) : data.reply;
 }
 /** Minimal, safe formatting: escape, then **bold**, paragraphs and simple list lines. */
 function aiFormat(text) {
@@ -3865,7 +3907,9 @@ async function explainResult(id) {
   const st = S.explain[id] = { busy: true };
   render();
   try {
-    st.text = await askAI("data", dataContext(resultContext(en.result)), [{ role: "user", content: "Explain the RESULT TO EXPLAIN in plain language for a student writing a thesis: what was tested and why this method was chosen (from the rules), what the result means in practice, and two cautions. Use only the numbers given. 120 to 200 words." }]);
+    // parseAgent accepts plain text (hosted assistant) and {reply, action} JSON (local model); an
+    // action returned while explaining is ignored.
+    st.text = parseAgent(await askAI("data", dataContext(resultContext(en.result)), [{ role: "user", content: "Explain the RESULT TO EXPLAIN in plain language for a student writing a thesis: what was tested and why this method was chosen (from the rules), what the result means in practice, and two cautions. Use only the numbers given. 120 to 200 words." }])).reply;
   } catch (e) { st.err = aiErrText(e.code); }
   st.busy = false; render();
 }
@@ -3877,10 +3921,9 @@ document.addEventListener("click", e => {
 });
 
 /* =====================================================================
-   QuantAI Chat (website build): a conversation interface. The assistant
-   (Groq via the Model Analysis Hub worker) reads a summary of the data,
-   the analyses run and the methodology inputs, and can ask QuantAI to
-   run an analysis. QuantAI's engine computes every result shown.
+   QuantAI Chat (website build): the configured assistant reads a summary
+   of the data, the analyses run and the methodology inputs, and can ask
+   QuantAI to run an analysis. QuantAI's deterministic engine computes results.
    ===================================================================== */
 const CHAT_KEY = "chats";
 S.chats = (() => { const c = store.get(CHAT_KEY, []); return Array.isArray(c) ? c.slice(0, 30) : []; })();
@@ -4015,7 +4058,15 @@ function runAction(a) {
   const many = (arr, label) => (Array.isArray(arr) ? arr : []).map(x => need(x, label));
   if (a.type === "describe") { const vars = many(a.vars && a.vars.length ? a.vars : varsUsable().map(v => v.name).slice(0, 8), "the table"); const group = a.group ? need(a.group, "the grouping variable", ["binary", "categorical"]) : ""; return { entry: addEntry("describe", { vars: vars.filter(v => v !== group), group }, runAnalysis("describe", { vars: vars.filter(v => v !== group), group })) }; }
   if (a.type === "compare") { const p = { outcome: need(a.outcome, "the outcome"), exposure: need(a.exposure, "the exposure"), paired: !!a.paired, force: "" }; return { entry: addEntry("compare", p, runAnalysis("compare", p)) }; }
-  if (a.type === "regression") { if (a.predictors === "auto") a = Object.assign({}, a, { predictors: candidatePredictors(need(a.outcome, "the outcome")) }); const p = { outcome: need(a.outcome, "the outcome"), preds: many(a.predictors, "the predictors"), model: ["auto", "linear", "logistic", "modpoisson", "poisson", "ordinal", "multinomial", "mixed"].includes(a.model) ? a.model : "auto", cluster: a.cluster ? need(a.cluster, "the cluster variable") : "" }; return { entry: addEntry("regression", p, runAnalysis("regression", p)) }; }
+  if (a.type === "regression") {
+    if (a.predictors === "auto") a = Object.assign({}, a, { predictors: candidatePredictors(need(a.outcome, "the outcome")) });
+    const outcome = need(a.outcome, "the outcome");
+    const preds = many(a.predictors, "the predictors");
+    const offset = a.offset ? need(a.offset, "the exposure offset", ["continuous", "count"]) : "";
+    if (offset && (offset === outcome || preds.includes(offset))) throw Object.assign(new Error("The exposure offset must be a positive exposure variable, not the outcome or an ordinary predictor."), { user: true });
+    const p = { outcome, preds, model: ["auto", "linear", "logistic", "modpoisson", "poisson", "ordinal", "multinomial", "mixed"].includes(a.model) ? a.model : "auto", cluster: a.cluster ? need(a.cluster, "the cluster variable") : "", offset };
+    return { entry: addEntry("regression", p, runAnalysis("regression", p)) };
+  }
   if (a.type === "survival") { const p = { time: need(a.time, "follow-up time", ["continuous", "count"]), event: need(a.event, "the event", ["binary"]), group: a.group ? need(a.group, "the group", ["binary", "categorical"]) : "", covs: many(a.covariates, "the covariates") }; return { entry: addEntry("survival", p, runAnalysis("survival", p)) }; }
   if (a.type === "forecast") {
     const value = need(a.value, "the value to forecast", ["continuous", "count"]), dv = a.date ? resolveVar(a.date) : null;

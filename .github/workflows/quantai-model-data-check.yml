@@ -5,11 +5,13 @@ on:
     paths:
       - "quantai-model/data/**"
       - "quantai-model/validate_data.py"
+      - "quantai-model/datagen/**"
       - ".github/workflows/quantai-model-data-check.yml"
   pull_request:
     paths:
       - "quantai-model/data/**"
       - "quantai-model/validate_data.py"
+      - "quantai-model/datagen/**"
       - ".github/workflows/quantai-model-data-check.yml"
 
 jobs:
@@ -22,4 +24,7 @@ jobs:
           python-version: "3.11"
       - name: Validate training and held-out examples
         working-directory: quantai-model
-        run: python validate_data.py --train data/train.jsonl --eval data/eval.jsonl
+        run: |
+          python validate_data.py --train data/train.jsonl --eval data/eval.jsonl
+          python validate_data.py --train data/v4/train.jsonl --eval data/v4/eval.jsonl
+          python datagen/audit.py data/v4/train.jsonl data/v4/eval.jsonl
