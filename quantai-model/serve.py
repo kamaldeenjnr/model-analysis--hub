@@ -26,7 +26,7 @@ MODEL_PATH = Path(os.environ.get("QUANTAI_MODEL_PATH", ROOT / "outputs" / "quant
 DB_PATH = Path(os.environ.get("QUANTAI_KNOWLEDGE_DB", ROOT / "knowledge.sqlite3"))
 MAX_INPUT_CHARS = int(os.environ.get("QUANTAI_MAX_INPUT_CHARS", "10000"))
 MAX_NEW_TOKENS = int(os.environ.get("QUANTAI_MAX_NEW_TOKENS", "500"))
-MAX_INPUT_TOKENS = int(os.environ.get("QUANTAI_MAX_INPUT_TOKENS", "8192"))
+MAX_INPUT_TOKENS = int(os.environ.get("QUANTAI_MAX_INPUT_TOKENS", "3584"))
 PROMPT_VERSION = prompting.resolve_prompt_version(MODEL_PATH, os.environ.get("QUANTAI_PROMPT_VERSION"))
 ACTION_FIELDS = {
     "describe": {"type", "vars", "group"},
@@ -217,7 +217,16 @@ def chat(request: ChatRequest) -> ChatResponse:
     )
     try:
         prompt = _tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = _tokenizer(prompt, return_tensors="pt", truncation=True, max_length=MAX_INPUT_TOKENS)
+        # Never silently truncate a live request: the training pipeline rejects
+        # over-length examples, and truncation can remove the user's question.
+        inputs = _tokenizer(prompt, return_tensors="pt", truncation=False)
+        input_tokens = int(inputs["input_ids"].shape[-1])
+        if input_tokens > MAX_INPUT_TOKENS:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Request is {input_tokens} tokens; the local model limit is {MAX_INPUT_TOKENS}. "
+                       "Shorten the question or reduce the supplied context and try again.",
+            )
         if torch.cuda.is_available():
             inputs = {key: value.to(_model.device) for key, value in inputs.items()}
         with _model_lock, torch.inference_mode():
@@ -230,6 +239,8 @@ def chat(request: ChatRequest) -> ChatResponse:
                 eos_token_id=_tokenizer.eos_token_id,
             )
         generated = _tokenizer.decode(output[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Local inference failed: {type(exc).__name__}") from exc
     parsed = validate_output(generated)
