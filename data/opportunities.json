@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-26",
+ "updated": "2026-11-02",
  "items": [
   {
    "title": "Commonwealth Shared Scholarships",
@@ -57,26 +57,6 @@
    "deadline_note": "Apply by your course's funding deadline: 8 December 2026 or 6 January 2027.",
    "url": "https://www.mastercardfoundation.fund.cam.ac.uk/apply/application-process-timeline",
    "fit": "Fully funded Cambridge MPhil for African applicants, including population health.",
-   "verified": true
-  },
-  {
-   "title": "Mastercard Foundation Scholars Program – University of Cape Town",
-   "type": "scholarship",
-   "provider": "Mastercard Foundation / University of Cape Town",
-   "where": "South Africa",
-   "level": "Master's",
-   "fields": "Coursework master's in any faculty, including public health",
-   "funding": "Comprehensive scholarship plus leadership and career support",
-   "eligibility": [
-    "Citizen of an African country",
-    "Academic talent and financial barriers",
-    "Commitment to your community",
-    "Must also apply to UCT for admission"
-   ],
-   "deadline": "2026-10-31",
-   "deadline_note": "Postgraduate applications close 31 October 2026.",
-   "url": "https://www.uct.ac.za/mastercardfdn/apply-mastercard-foundation-scholars-program",
-   "fit": "MPH, epidemiology or biostatistics while staying in Africa.",
    "verified": true
   },
   {
@@ -207,7 +187,7 @@
     "Second Class Upper, 2 years' experience, national service done"
    ],
    "deadline": null,
-   "deadline_note": "2027/28 call not yet out; last year it opened mid-November. Ghanaians are nominated through the Ghana Scholarships Authority.",
+   "deadline_note": "Ghana is a partner (via Ghana Scholarships Secretariat). 2027/28 call not yet open; it usually runs November to mid-January.",
    "url": "https://stipendiumhungaricum.hu/",
    "fit": "Many English-taught data and health degrees.",
    "verified": false
@@ -226,7 +206,7 @@
     "Age limits apply"
    ],
    "deadline": null,
-   "deadline_note": "Usually 10 January – 20 February.",
+   "deadline_note": "2027 call not yet open. Official calendar gives an annual window of 10 January – 20 February.",
    "url": "https://www.turkiyeburslari.gov.tr/",
    "fit": "One application covers many universities.",
    "verified": false
@@ -245,7 +225,7 @@
     "Apply to the programme first, then to SI"
    ],
    "deadline": null,
-   "deadline_note": "University application by mid-January; SI application in February.",
+   "deadline_note": "2027/28 dates not yet on the official page. Ghana may not be on the eligible country list — check before applying.",
    "url": "https://si.se/en/apply/scholarships/swedish-institute-scholarships-for-global-professionals/",
    "fit": "Rewards work experience — suits a working analyst.",
    "verified": false
@@ -302,7 +282,7 @@
     "Age and GPA limits"
    ],
    "deadline": null,
-   "deadline_note": "Expect a February–March 2027 call.",
+   "deadline_note": "Only the 2027 undergraduate notice is out; graduate notice usually follows in early year.",
    "url": "https://www.studyinkorea.go.kr/",
    "fit": "Strong AI and data science universities.",
    "verified": false
@@ -339,7 +319,7 @@
     "Leadership and community service"
    ],
    "deadline": null,
-   "deadline_note": "2027/28 call not yet out. Last deadline was 15 March 2026.",
+   "deadline_note": "2027/28 deadline not yet posted; the last cycle closed 15 March.",
    "url": "https://aims.edu.gh/application/masters-in-mathematical-sciences-application/",
    "fit": "Builds the modelling skills behind malaria work — and AIMS Ghana is in-country.",
    "verified": false
@@ -358,7 +338,7 @@
     "Return home for 2 years after"
    ],
    "deadline": null,
-   "deadline_note": "Opens February 2027.",
+   "deadline_note": "2028 intake applications open in February 2027; exact dates to be announced.",
    "url": "https://australiaawardsafrica.org/awards/apply/",
    "fit": "Depends on the 2028 priority areas.",
    "verified": false
@@ -437,25 +417,6 @@
    "url": "https://www.who.int/careers/internships",
    "fit": "Health-data internships at WHO AFRO or the Ghana office.",
    "verified": true
-  },
-  {
-   "title": "Forward-Deployed Data Analyst",
-   "type": "job",
-   "provider": "QED.ai",
-   "where": "Remote / travel to African health ministries",
-   "level": "Early career",
-   "fields": "Health data analysis",
-   "funding": "Not stated",
-   "eligibility": [
-    "French or Portuguese at B2 or above",
-    "At least 25% of the year in the project country",
-    "Strong number sense"
-   ],
-   "deadline": null,
-   "deadline_note": "Still listed, no closing date. Projects include Malawi, Cameroon, Côte d'Ivoire, Nigeria, Mozambique.",
-   "url": "https://builtin.com/job/forward-deployed-data-analyst/7771078",
-   "fit": "Working directly with ministries of health on their data.",
-   "verified": false
   },
   {
    "title": "UN Online Volunteering",
@@ -548,25 +509,6 @@
    "verified": true
   },
   {
-   "title": "Zindi: Bias Bounty Mapping Equity Challenge",
-   "type": "competition",
-   "provider": "Zindi / Humane Intelligence / Radiant Earth",
-   "where": "Remote",
-   "level": "Any level",
-   "fields": "Geospatial data, bias analysis",
-   "funding": "USD 10,000 total",
-   "eligibility": [
-    "Open to all",
-    "Teams of up to four",
-    "Open-source tools only"
-   ],
-   "deadline": "2026-10-31",
-   "deadline_note": "Closes 23:29 UTC.",
-   "url": "https://zindi.africa/competitions/bias-bounty-mapping-equity-challenge",
-   "fit": "Uses spatial statistics skills.",
-   "verified": true
-  },
-  {
    "title": "MIT Solve 2027 Global Health Challenge",
    "type": "competition",
    "provider": "MIT Solve",
@@ -615,10 +557,10 @@
     "Two-page concept note plus CV"
    ],
    "deadline": "2026-11-15",
-   "deadline_note": "Early round 25 October; regular 15 November; final extension 6 December 2026 (midnight PT).",
+   "deadline_note": "Regular round closes 15 November 2026; final extension 6 December 2026 (sign up on the extension form). Midnight PT.",
    "url": "https://d-prize.org/",
    "fit": "A venture delivering malaria prevention in the Volta Region.",
-   "verified": false
+   "verified": true
   },
   {
    "title": "TEF Entrepreneurship Programme",
@@ -847,43 +789,6 @@
    "verified": true
   },
   {
-   "title": "Google Africa Virtual Algorithms Workshop",
-   "type": "training",
-   "provider": "Google",
-   "where": "Online",
-   "level": "Students & recent graduates",
-   "fields": "Data structures, algorithms, coding interviews",
-   "funding": "Free",
-   "eligibility": [
-    "CS or engineering student, or recent graduate",
-    "Aged 18+"
-   ],
-   "deadline": "2026-10-31",
-   "deadline_note": "Live session Saturday 31 October 2026, 12:00–14:00 GMT. Register before.",
-   "url": "https://rsvp.withgoogle.com/events/algorithms-workshop-africa-2026_50f6a0_26176b/home",
-   "fit": "Quick prep for tech job interviews.",
-   "verified": false
-  },
-  {
-   "title": "Advisor, Right-Fit Evidence – IPA",
-   "type": "job",
-   "provider": "Innovations for Poverty Action (IPA)",
-   "where": "Ghana, Kenya, Côte d'Ivoire, Nigeria or Uganda (office, hybrid or remote)",
-   "level": "Early–mid career",
-   "fields": "Monitoring, evaluation and learning; data systems; evidence advisory",
-   "funding": "Paid full-time role",
-   "eligibility": [
-    "Bachelor's in economics, statistics, social science or related",
-    "2–5 years' relevant experience",
-    "Based in an eligible country, fluent English"
-   ],
-   "deadline": "2026-11-01",
-   "deadline_note": "Apply by 1 November 2026.",
-   "url": "https://poverty-action.org/advisor-right-fit-evidence-11",
-   "fit": "Helps NGOs build M&E and data systems — close to his dashboards and NGO work.",
-   "verified": true
-  },
-  {
    "title": "Imperial College President's PhD Scholarships 2027/28",
    "type": "scholarship",
    "provider": "Imperial College London",
@@ -937,6 +842,105 @@
    "deadline_note": "Applications open 9 November 2026; deadline to be announced.",
    "url": "https://www.obama.org/programs/leaders/africa",
    "fit": "Recognises his Sunshine Project NGO and public health work.",
+   "verified": true
+  },
+  {
+   "title": "MBZUAI MSc / PhD in Artificial Intelligence (Fall 2027)",
+   "type": "scholarship",
+   "provider": "Mohamed bin Zayed University of Artificial Intelligence",
+   "where": "Abu Dhabi, UAE",
+   "level": "Master's & PhD",
+   "fields": "Machine learning, AI",
+   "funding": "Free tuition, monthly stipend, flight, insurance and visa for funded students",
+   "eligibility": [
+    "STEM bachelor's (CS, engineering, maths or related)",
+    "CGPA about 3.0+ out of 4",
+    "English test, statement of purpose, 2–3 referees",
+    "Online screening exam"
+   ],
+   "deadline": "2026-12-15",
+   "deadline_note": "Closes 17:00 GST. PhD funding is central; MSc funding is via assistantship or merit review.",
+   "url": "https://mbzuai.ac.ae/study/admission-process",
+   "fit": "Funded route into ML research to build on QuantAI and modelling work.",
+   "verified": true
+  },
+  {
+   "title": "Erasmus Mundus GEM MSc – Geo-information Science and Earth Observation",
+   "type": "scholarship",
+   "provider": "ITC Twente with UCLouvain, Lund and Tartu",
+   "where": "Netherlands, Belgium, Sweden, Estonia",
+   "level": "Master's",
+   "fields": "GIS, remote sensing, environmental modelling",
+   "funding": "Erasmus Mundus scholarships (about 16–20 per intake)",
+   "eligibility": [
+    "First or upper-second-class bachelor's",
+    "Valid English test before the deadline",
+    "CV on the GEM template; no application fee",
+    "Video interview for shortlisted applicants"
+   ],
+   "deadline": "2027-01-15",
+   "deadline_note": "Closes 23:59 CET. Results 31 March 2027; starts September 2027.",
+   "url": "https://www.gem-msc.eu/apply-to-gem/",
+   "fit": "Direct match for ArcGIS and climate-data malaria mapping.",
+   "verified": true
+  },
+  {
+   "title": "Mastercard Foundation Scholars Program – UC Berkeley",
+   "type": "scholarship",
+   "provider": "UC Berkeley / Mastercard Foundation",
+   "where": "USA",
+   "level": "Master's",
+   "fields": "MPH/MS Epidemiology, Biostatistics, Infectious Diseases, EECS, data and information",
+   "funding": "Mastercard Foundation scholarship (check page for full coverage)",
+   "eligibility": [
+    "African citizen, no non-African dual citizenship",
+    "Admitted to an eligible Berkeley master's",
+    "Intends to return to Africa",
+    "Priority if no prior master's"
+   ],
+   "deadline": "2026-11-15",
+   "deadline_note": "Fee waiver request by 15 November 2026. Programme deadlines vary, mostly December.",
+   "url": "https://mcfscholarsprogram.berkeley.edu/graduate-application-process",
+   "fit": "Epidemiology or Biostatistics MPH fits his malaria modelling directly.",
+   "verified": true
+  },
+  {
+   "title": "Mastercard Foundation Scholars Program – Sciences Po (Master's)",
+   "type": "scholarship",
+   "provider": "Sciences Po / Mastercard Foundation",
+   "where": "Paris, France",
+   "level": "Master's",
+   "fields": "Public policy, social sciences",
+   "funding": "Covers full financial need",
+   "eligibility": [
+    "African citizen, no non-African second nationality",
+    "Under 35 on 1 September 2027",
+    "No existing master's",
+    "Bachelor's from a listed institution"
+   ],
+   "deadline": "2026-12-14",
+   "deadline_note": "Earlier round 23 November 2026; results April 2027.",
+   "url": "https://www.sciencespo.fr/students/en/fees-funding/bursaries-financial-aid/mastercard-foundation-scholarships/graduate-study/",
+   "fit": "Worth it if he wants a health or data policy route.",
+   "verified": true
+  },
+  {
+   "title": "Zindi: Underwater Vessel Noise Challenge",
+   "type": "competition",
+   "provider": "Zindi / French Embassy in South Africa",
+   "where": "Remote",
+   "level": "Any level",
+   "fields": "Signal processing, machine learning, regression",
+   "funding": "USD 5,000 total, incl. two USD 1,000 write-up prizes",
+   "eligibility": [
+    "Open to all",
+    "Teams of up to four",
+    "Open-source tools only"
+   ],
+   "deadline": "2026-12-13",
+   "deadline_note": "Results 29 January 2027. Zindi has moved to zindi.world.",
+   "url": "https://zindi.world/competitions/french-embassy-underwater-vessel-noise-challenge",
+   "fit": "Paid ML practice and portfolio piece; write-up prizes reward clear analysis.",
    "verified": true
   }
  ]
