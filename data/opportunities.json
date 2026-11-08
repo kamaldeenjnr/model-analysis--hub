@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-02",
+ "updated": "2026-11-08",
  "items": [
   {
    "title": "Commonwealth Shared Scholarships",
@@ -509,24 +509,6 @@
    "verified": true
   },
   {
-   "title": "MIT Solve 2027 Global Health Challenge",
-   "type": "competition",
-   "provider": "MIT Solve",
-   "where": "Remote, global",
-   "level": "Prototype stage or later",
-   "fields": "Health technology, AI and data",
-   "funding": "USD 10,000 per team, plus larger prizes",
-   "eligibility": [
-    "Working prototype or pilot",
-    "Must use technology"
-   ],
-   "deadline": "2026-11-06",
-   "deadline_note": "Closes 12:00 EST.",
-   "url": "https://solve.mit.edu/challenges/2027-global-health-challenge",
-   "fit": "A health-data tool or dashboard could qualify.",
-   "verified": true
-  },
-  {
    "title": "ECA Innovation Café – African AI Innovations",
    "type": "competition",
    "provider": "UNECA, ITU, Research ICT Africa",
@@ -942,6 +924,124 @@
    "url": "https://zindi.world/competitions/french-embassy-underwater-vessel-noise-challenge",
    "fit": "Paid ML practice and portfolio piece; write-up prizes reward clear analysis.",
    "verified": true
+  },
+  {
+   "title": "DHIS2 Online Academy fundamentals courses",
+   "type": "training",
+   "provider": "HISP Centre, University of Oslo",
+   "where": "Online, self-paced",
+   "level": "Any",
+   "fields": "Health information systems, DHIS2 data capture and analysis",
+   "funding": "Free",
+   "eligibility": [
+    "Open to anyone",
+    "Register any time",
+    "No fee"
+   ],
+   "deadline": null,
+   "deadline_note": "Open enrolment at any time",
+   "url": "https://dhis2.org/academy/schedule",
+   "fit": "Formal DHIS2 certificates back up his DHIMS work on a CV",
+   "verified": true
+  },
+  {
+   "title": "DataKind volunteer data scientist",
+   "type": "training",
+   "provider": "DataKind",
+   "where": "Mostly remote; some chapter events",
+   "level": "Any with data skills",
+   "fields": "Data science for social good",
+   "funding": "Unpaid volunteering",
+   "eligibility": [
+    "Anywhere in the world",
+    "Data science or analytics skills",
+    "Create a profile on DataKind Rosterfy"
+   ],
+   "deadline": null,
+   "deadline_note": "Rolling; project calls go out by newsletter",
+   "url": "https://www.datakind.org/join-us/volunteer",
+   "fit": "Python, R and dashboard skills fit real non-profit data projects",
+   "verified": true
+  },
+  {
+   "title": "Maastricht University NL-High Potential Scholarship",
+   "type": "scholarship",
+   "provider": "Maastricht University",
+   "where": "Maastricht, Netherlands",
+   "level": "Master's",
+   "fields": "MSc Global Health, MSc Epidemiology, MSc Health and Digital Transformation, MSc Health Promotion and others",
+   "funding": "Full: tuition, visa, insurance, room, living costs (EUR 20,150 for 1-year or EUR 38,750 for 2-year master's)",
+   "eligibility": [
+    "Non-EU/EEA nationals aged 35 or under on 1 Sep 2027",
+    "GPA of at least 7.5/10 or equivalent; no work experience required",
+    "Final-year students can apply with current transcript (degree by 1 Sep 2027)",
+    "Global Health asks non-EEA degree holders for a GRE General score"
+   ],
+   "deadline": "2027-02-01",
+   "deadline_note": "Apply for the master's via Studielink and submit full file by 10 Dec 2026; scholarship form closes 1 Feb 2027, 23:59 CET",
+   "url": "https://www.maastrichtuniversity.nl/maastricht-university-nl-high-potential-scholarship",
+   "fit": "Fully funded Global Health or Epidemiology MSc open to final-year students",
+   "verified": true
+  },
+  {
+   "title": "HYGIEIA Erasmus Mundus Joint Master in Health and Wellbeing across the Lifespan",
+   "type": "scholarship",
+   "provider": "Erasmus Mundus consortium (Univ. Lusófona, Univ. Illes Balears, Univ. Belgrade)",
+   "where": "Portugal, Spain and Serbia",
+   "level": "Master's (2 years, 120 ECTS)",
+   "fields": "Public health, preventive health, digital health tools, health promotion",
+   "funding": "Full: tuition waiver plus EUR 1,400 per month for up to 24 months",
+   "eligibility": [
+    "Bachelor's in health or life sciences (EQF level 6)",
+    "Final-year students accepted if diploma due by 31 Jul 2027",
+    "No minimum work experience stated",
+    "English test required (e.g. IELTS 6.5, no band below 6.0)"
+   ],
+   "deadline": "2027-02-15",
+   "deadline_note": "2027-2029 intake applications open 16 Nov 2026 and close 15 Feb 2027; 16 scholarships per intake",
+   "url": "https://www.hygieiamaster.eu/admission/application-timings",
+   "fit": "Public health Erasmus Mundus that accepts final-year applicants",
+   "verified": true
+  },
+  {
+   "title": "ECT+ One Health Erasmus Mundus Joint Master (Environmental Contamination and Toxicology)",
+   "type": "scholarship",
+   "provider": "Erasmus Mundus consortium led by University of the Basque Country (UPV/EHU)",
+   "where": "Spain, Belgium, France, Norway, Italy",
+   "level": "Master's (2 years)",
+   "fields": "One Health, environmental health, toxicology, health sciences",
+   "funding": "Full Erasmus Mundus scholarship (tuition plus monthly allowance)",
+   "eligibility": [
+    "Bachelor's in health sciences, biosciences or related field (min. ECTS grade C)",
+    "Final-year students can apply with transcript of at least 4 semesters",
+    "Work experience weighed but not required",
+    "Proof of English needed"
+   ],
+   "deadline": "2027-01-31",
+   "deadline_note": "Eligibility step closes 31 Jan; scholarship application by 15 Mar. Call opens 9 Nov 2026 for 2027-2029. Page does not print the year",
+   "url": "https://www.ectplus.eu/application-enrolment/application/",
+   "fit": "Environmental and One Health route open to final-year health graduates",
+   "verified": true
+  },
+  {
+   "title": "Government of Ireland International Education Scholarship (GOI-IES)",
+   "type": "scholarship",
+   "provider": "Higher Education Authority, Ireland",
+   "where": "Ireland",
+   "level": "Master's (NFQ level 9) or PhD",
+   "fields": "Any field, including public health, epidemiology, data science",
+   "funding": "EUR 10,000 stipend plus full fee waiver for one year",
+   "eligibility": [
+    "Domiciled outside EU/EEA, Switzerland and UK",
+    "Needs a conditional or final offer from an eligible Irish institution",
+    "No work experience requirement stated",
+    "Final-year status not stated on page"
+   ],
+   "deadline": null,
+   "deadline_note": "2027/28 call not yet out; the 2026 call closed 12 March.",
+   "url": "https://hea.ie/policy/internationalisation/goi-ies",
+   "fit": "Fee waiver plus stipend for a one-year Irish MSc",
+   "verified": false
   }
  ]
 }
