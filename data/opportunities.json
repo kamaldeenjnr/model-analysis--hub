@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-08",
+ "updated": "2026-11-09",
  "items": [
   {
    "title": "Commonwealth Shared Scholarships",
@@ -131,7 +131,7 @@
    ],
    "deadline": "2026-11-15",
    "deadline_note": "Window 1 October – 15 November 2026 for October 2027 entry.",
-   "url": "https://www.uni-goettingen.de/en/daad+epos+scholarship+-+overview/572462.html",
+   "url": "https://uni-goettingen.de/en/572166.html",
    "fit": "Econometrics-heavy degree for analysts moving towards health economics.",
    "verified": true
   },
@@ -168,10 +168,10 @@
     "Apply to each programme separately"
    ],
    "deadline": null,
-   "deadline_note": "Most deadlines fall October 2026 – January 2027.",
+   "deadline_note": "Varies by programme; most close October–January",
    "url": "https://www.eacea.ec.europa.eu/scholarships/erasmus-mundus-catalogue_en",
    "fit": "Several programmes combine data science with health.",
-   "verified": false
+   "verified": true
   },
   {
    "title": "Stipendium Hungaricum 2027/28",
@@ -187,8 +187,8 @@
     "Second Class Upper, 2 years' experience, national service done"
    ],
    "deadline": null,
-   "deadline_note": "Ghana is a partner (via Ghana Scholarships Secretariat). 2027/28 call not yet open; it usually runs November to mid-January.",
-   "url": "https://stipendiumhungaricum.hu/",
+   "deadline_note": "2027/28 call not yet published; usually closes mid-January",
+   "url": "https://stipendiumhungaricum.hu/apply_timeline/",
    "fit": "Many English-taught data and health degrees.",
    "verified": false
   },
@@ -225,7 +225,7 @@
     "Apply to the programme first, then to SI"
    ],
    "deadline": null,
-   "deadline_note": "2027/28 dates not yet on the official page. Ghana may not be on the eligible country list — check before applying.",
+   "deadline_note": "Check Ghana is on the 2027/28 country list; SI window reported Feb 2027",
    "url": "https://si.se/en/apply/scholarships/swedish-institute-scholarships-for-global-professionals/",
    "fit": "Rewards work experience — suits a working analyst.",
    "verified": false
@@ -244,8 +244,8 @@
     "Willing to learn Japanese"
    ],
    "deadline": null,
-   "deadline_note": "The 2027 embassy round closed in May 2026. Next embassy round is for 2028 entry; some universities run their own routes.",
-   "url": "https://www.studyinjapan.go.jp/en/smap-stopj-applications-research.html",
+   "deadline_note": "Ghana embassy 2027 cycle closed 29 May 2026; 2028 notice expected spring 2027",
+   "url": "https://www.gh.emb-japan.go.jp/itpr_ja/11_000001_00551.html",
    "fit": "Strong infectious disease modelling groups.",
    "verified": false
   },
@@ -263,8 +263,8 @@
     "Online application plus hard copies to the Secretariat"
    ],
    "deadline": null,
-   "deadline_note": "2027/28 notice not yet posted. Last year's appeared on 5 November — watch the Authority's site.",
-   "url": "https://scholarships.gov.gh/",
+   "deadline_note": "No 2027/28 notice yet; watch GSA opportunities page",
+   "url": "https://scholarships.gov.gh/opportunities",
    "fit": "A common route into English-taught degrees.",
    "verified": false
   },
@@ -319,7 +319,7 @@
     "Leadership and community service"
    ],
    "deadline": null,
-   "deadline_note": "2027/28 deadline not yet posted; the last cycle closed 15 March.",
+   "deadline_note": "2027/28 intake not yet published; last deadline was 15 March",
    "url": "https://aims.edu.gh/application/masters-in-mathematical-sciences-application/",
    "fit": "Builds the modelling skills behind malaria work — and AIMS Ghana is in-country.",
    "verified": false
@@ -338,10 +338,10 @@
     "Return home for 2 years after"
    ],
    "deadline": null,
-   "deadline_note": "2028 intake applications open in February 2027; exact dates to be announced.",
+   "deadline_note": "2028 intake opens February 2027; dates to be announced",
    "url": "https://australiaawardsafrica.org/awards/apply/",
    "fit": "Depends on the 2028 priority areas.",
-   "verified": false
+   "verified": true
   },
   {
    "title": "Fulbright Foreign Student Program (Ghana)",
@@ -375,8 +375,8 @@
     "Strict age limits (e.g. master's: men 25, women 28)"
    ],
    "deadline": null,
-   "deadline_note": "2027/28 call expected around mid-November 2026 (last year 15 November – 15 December).",
-   "url": "https://au.int/",
+   "deadline_note": "2027/28 call not yet seen; last call ran 15 Nov–15 Dec",
+   "url": "https://au.int/en/announcements",
    "fit": "Fully funded African option if within the age limits.",
    "verified": false
   },
@@ -539,7 +539,7 @@
     "Two-page concept note plus CV"
    ],
    "deadline": "2026-11-15",
-   "deadline_note": "Regular round closes 15 November 2026; final extension 6 December 2026 (sign up on the extension form). Midnight PT.",
+   "deadline_note": "Regular round 15 Nov 2026; extension round reported to 6 Dec 2026",
    "url": "https://d-prize.org/",
    "fit": "A venture delivering malaria prevention in the Volta Region.",
    "verified": true
@@ -880,8 +880,8 @@
     "Intends to return to Africa",
     "Priority if no prior master's"
    ],
-   "deadline": "2026-11-15",
-   "deadline_note": "Fee waiver request by 15 November 2026. Programme deadlines vary, mostly December.",
+   "deadline": null,
+   "deadline_note": "Set by each master's programme; only first-round applicants considered",
    "url": "https://mcfscholarsprogram.berkeley.edu/graduate-application-process",
    "fit": "Epidemiology or Biostatistics MPH fits his malaria modelling directly.",
    "verified": true
@@ -1038,10 +1038,120 @@
     "Final-year status not stated on page"
    ],
    "deadline": null,
-   "deadline_note": "2027/28 call not yet out; the 2026 call closed 12 March.",
+   "deadline_note": "2027 call not yet published; 2026 call ran Jan–March",
    "url": "https://hea.ie/policy/internationalisation/goi-ies",
    "fit": "Fee waiver plus stipend for a one-year Irish MSc",
    "verified": false
+  },
+  {
+   "title": "Yenching Scholars – Master's in China Studies (2027)",
+   "type": "scholarship",
+   "provider": "Yenching Academy, Peking University",
+   "where": "Beijing, China",
+   "level": "Master's",
+   "fields": "China Studies incl. economics, management, politics",
+   "funding": "Full tuition, housing, monthly stipend, return flight, field study",
+   "eligibility": [
+    "Bachelor's in any field by Aug 2027",
+    "International applicants"
+   ],
+   "deadline": "2026-11-30",
+   "deadline_note": "09:00 Beijing time, so effectively 29 Nov in Ghana",
+   "url": "https://yenchingacademy.pku.edu.cn/ADMISSIONS.htm",
+   "fit": "Fully funded and open to any degree; needs a health-policy angle",
+   "verified": true
+  },
+  {
+   "title": "TU Delft Justus & Louise van Effen Excellence Scholarship",
+   "type": "scholarship",
+   "provider": "TU Delft",
+   "where": "Delft, Netherlands",
+   "level": "Master's",
+   "fields": "Any 2-year TU Delft MSc, e.g. Computer Science, Applied Mathematics",
+   "funding": "Full tuition plus a living-cost contribution, renewable for year 2",
+   "eligibility": [
+    "International applicant",
+    "Top of graduating class",
+    "Full MSc application by deadline"
+   ],
+   "deadline": "2026-12-01",
+   "deadline_note": "23:59 CET; MSc application, scholarship form, reference and English test all due",
+   "url": "https://www.tudelft.nl/en/education/study-programme-orientation/practical-matters/scholarships",
+   "fit": "Strong CS or data MSc for a Python developer with a top record",
+   "verified": true
+  },
+  {
+   "title": "Johns Hopkins PhD in Epidemiology",
+   "type": "scholarship",
+   "provider": "Johns Hopkins Bloomberg School of Public Health",
+   "where": "Baltimore, USA",
+   "level": "PhD",
+   "fields": "Epidemiology incl. infectious disease and environmental epidemiology",
+   "funding": "Full tuition up to 4 years, health insurance, stipend (minimum USD 52,000/yr)",
+   "eligibility": [
+    "Bachelor's accepted; Master's recommended",
+    "One year of related full-time work",
+    "Maths and science background"
+   ],
+   "deadline": "2026-12-01",
+   "deadline_note": "For autumn 2027 entry",
+   "url": "https://publichealth.jhu.edu/departments/epidemiology/programs/faqs",
+   "fit": "Funded PhD that suits malaria-climate modelling; accepts a BSc",
+   "verified": true
+  },
+  {
+   "title": "Zindi: GenAI for Good Challenge – Cities Edition",
+   "type": "competition",
+   "provider": "IEEE HTB and UNDP, on Zindi",
+   "where": "Online",
+   "level": "Open",
+   "fields": "Generative AI over documents, tables and maps",
+   "funding": "Winners can get USD 10,000 prototype plus up to USD 30,000 pilot",
+   "eligibility": [
+    "Teams of 2–4",
+    "Age 18+"
+   ],
+   "deadline": "2026-12-13",
+   "deadline_note": "Phase 1 closes 13 Dec; results 14 Dec",
+   "url": "https://zindi.world/competitions/GenAI-for-Good-Challenge",
+   "fit": "Uses his Python, web and geospatial skills; needs a team",
+   "verified": true
+  },
+  {
+   "title": "Erasmus Mundus MSc in Geospatial Technologies (GEOTECH)",
+   "type": "scholarship",
+   "provider": "Universitat Jaume I and partners",
+   "where": "Spain, Germany, Portugal",
+   "level": "Master's",
+   "fields": "GIS and geospatial data science",
+   "funding": "Tuition, insurance and EUR 1,400/month for 18 months",
+   "eligibility": [
+    "Degree completed by 7 Jan 2027",
+    "No previous Erasmus Mundus scholarship"
+   ],
+   "deadline": "2027-01-07",
+   "deadline_note": "18:00 CET; scholarship round open now",
+   "url": "https://mastergeotech.uji.es/how-to-apply/dates-and-deadlines/",
+   "fit": "Direct match for ArcGIS and spatial malaria-risk mapping",
+   "verified": true
+  },
+  {
+   "title": "ISTA Fully Funded PhD Programme (2027 intake)",
+   "type": "scholarship",
+   "provider": "Institute of Science and Technology Austria",
+   "where": "Klosterneuburg, Austria",
+   "level": "PhD",
+   "fields": "Data science, scientific computing, computer science, biology, maths",
+   "funding": "Salaried post (about EUR 3,000+/month gross, 14 times a year), no tuition",
+   "eligibility": [
+    "Bachelor's or Master's by Sept 2027",
+    "Choose up to 3 research groups"
+   ],
+   "deadline": "2027-01-08",
+   "deadline_note": "15:00 CET; references due 12 Jan 2027",
+   "url": "https://phd.ista.ac.at/phd-application-admission/",
+   "fit": "Salaried data science PhD that admits Bachelor's holders",
+   "verified": true
   }
  ]
 }
