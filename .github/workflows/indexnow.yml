@@ -1,0 +1,20 @@
+# Tells Bing, Yandex and other IndexNow search engines about changed pages after each update,
+# so new titles and pages show up in their results quickly.
+name: Notify search engines
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+jobs:
+  indexnow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for the new version to go live
+        run: sleep 120
+      - name: Send all sitemap pages to IndexNow
+        run: |
+          URLS=$(curl -s https://modelanalysishub.com/sitemap.xml | grep -o '<loc>[^<]*</loc>' | sed 's#</\?loc>##g' | python3 -c 'import sys,json;print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))')
+          echo "$URLS"
+          curl -s -o /dev/null -w "IndexNow status %{http_code}\n" -X POST https://api.indexnow.org/indexnow \
+            -H 'Content-Type: application/json; charset=utf-8' \
+            -d "{\"host\":\"modelanalysishub.com\",\"key\":\"6d2a4765134f31a8bf8de416ad79e779\",\"keyLocation\":\"https://modelanalysishub.com/6d2a4765134f31a8bf8de416ad79e779.txt\",\"urlList\":$URLS}"
