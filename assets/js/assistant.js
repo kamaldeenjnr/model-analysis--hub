@@ -8,23 +8,23 @@
 
   var KB = [
     { id: 'about', words: 'who amadu kamal founder about you yourself person owner behind background story bio',
-      a: 'Amadu Kamal is a data analyst and software engineer from Ghana, and the founder of Model Analysis Hub. He builds statistical models, risk maps, dashboards and websites, and created the free QuantAI data tool. <a href="founder.html">More about Amadu</a>.' },
+      a: 'Amadu Kamal is a data analyst and software engineer from Ghana, and the founder of Model Analysis Hub. He builds statistical models, risk maps, dashboards and websites, and created the free QuantAI data tool. <a href="/founder">More about Amadu</a>.' },
     { id: 'contact', words: 'contact reach email mail phone number call whatsapp talk message hire book meeting',
-      a: 'The quickest way is WhatsApp: <a href="' + WA + '" target="_blank" rel="noopener">+233 59 558 6430</a>. You can also email <a href="mailto:' + MAIL + '">' + MAIL + '</a> or use the <a href="index.html#contact">contact form</a>.' },
+      a: 'The quickest way is WhatsApp: <a href="' + WA + '" target="_blank" rel="noopener">+233 59 558 6430</a>. You can also email <a href="mailto:' + MAIL + '">' + MAIL + '</a> or use the <a href="/#contact">contact form</a>.' },
     { id: 'services', words: 'service services offer do help build work with can you make need project job freelance consult consulting',
-      a: 'Amadu takes on three kinds of work: <b>statistical and predictive models</b> (forecasts, risk models, validation), <b>geospatial analysis</b> (maps of where a problem is concentrated) and <b>websites, dashboards and web platforms</b> (like <a href="projects.html#sunshine-project">The Sunshine Project website</a>). Tell him what you need: <a href="index.html#contact">get in touch</a>.' },
+      a: 'Amadu takes on three kinds of work: <b>statistical and predictive models</b> (forecasts, risk models, validation), <b>geospatial analysis</b> (maps of where a problem is concentrated) and <b>websites, dashboards and web platforms</b> (like <a href="/projects#sunshine-project">The Sunshine Project website</a>). Tell him what you need: <a href="/#contact">get in touch</a>.' },
     { id: 'price', words: 'price cost charge rate fee budget how much pay quote',
       a: 'Pricing depends on the size of the job and how clean the data is. Send a short description and a sample of the data on <a href="' + WA + '" target="_blank" rel="noopener">WhatsApp</a> or <a href="mailto:' + MAIL + '">email</a> and you will get a quote.' },
     { id: 'projects', words: 'projects portfolio work examples case studies done previous past built',
-      a: 'Highlights: <a href="projects.html#sunshine-project">The Sunshine Project website</a> for a Ghanaian NGO, a <a href="projects.html#malaria-risk">malaria risk model for Ghana</a> (with risk maps, exceedance probabilities and validation), a <a href="projects.html#healthcare-dashboard">healthcare utilisation dashboard</a> and <a href="projects.html#projectflow">ProjectFlow</a>, a project management platform for university research. <a href="projects.html">See all projects</a>.' },
+      a: 'Highlights: <a href="/projects#sunshine-project">The Sunshine Project website</a> for a Ghanaian NGO, a <a href="/projects#malaria-risk">malaria risk model for Ghana</a> (with risk maps, exceedance probabilities and validation), a <a href="/projects#healthcare-dashboard">healthcare utilisation dashboard</a> and <a href="/projects#projectflow">ProjectFlow</a>, a project management platform for university research. <a href="/projects">See all projects</a>.' },
     { id: 'malaria', words: 'malaria ghana map maps risk disease health epidemiology geospatial spatial region exceedance prevalence',
-      a: 'The malaria project estimates relative malaria risk for each region of Ghana, the probability that prevalence goes above 30%, and checks the predictions against observed prevalence. <a href="projects.html#malaria-risk">See the maps</a>.' },
+      a: 'The malaria project estimates relative malaria risk for each region of Ghana, the probability that prevalence goes above 30%, and checks the predictions against observed prevalence. <a href="/projects#malaria-risk">See the maps</a>.' },
     { id: 'sunshine', words: 'sunshine project ngo charity website websites site web design client clients built make build wordpress landing page',
-      a: 'Yes, Amadu builds websites. His latest is for <a href="projects.html#sunshine-project">The Sunshine Project</a>, a Ghanaian NGO: a full multi-page site with an admin login so their team updates programmes, schedules and photos themselves. It is live at <a href="https://sunshine-project-website.vercel.app" target="_blank" rel="noopener">sunshine-project-website.vercel.app</a>. Want one? <a href="https://wa.me/233595586430" target="_blank" rel="noopener">Message him on WhatsApp</a>.' },
+      a: 'Yes, Amadu builds websites. His latest is for <a href="/projects#sunshine-project">The Sunshine Project</a>, a Ghanaian NGO: a full multi-page site with an admin login so their team updates programmes, schedules and photos themselves. It is live at <a href="https://sunshine-project-website.vercel.app" target="_blank" rel="noopener">sunshine-project-website.vercel.app</a>. Want one? <a href="https://wa.me/233595586430" target="_blank" rel="noopener">Message him on WhatsApp</a>.' },
     { id: 'projectflow', words: 'projectflow project flow university student thesis research management platform phd masters undergraduate',
-      a: 'ProjectFlow is a full-stack platform for managing university research projects at Undergraduate, Master\'s and PhD level, from first draft to final publication. It was completed in 2025. <a href="projects.html#projectflow">Details</a>.' },
+      a: 'ProjectFlow is a full-stack platform for managing university research projects at Undergraduate, Master\'s and PhD level, from first draft to final publication. It was completed in 2025. <a href="/projects#projectflow">Details</a>.' },
     { id: 'quantai', words: 'quantai quant ai tool analyse analyze upload spreadsheet csv excel data statistics forecast regression correlation',
-      a: '<b>QuantAI</b> is a free research and statistics tool on this site. It helps plan a study (design, sample size, which test), then analyses a CSV or Excel file: it checks the assumptions, picks the right test, fits regression models and forecasts, and exports the same analysis as Stata, Python, R and SPSS code. Your file stays on your device. <a href="ai.html">Open QuantAI</a>.' },
+      a: '<b>QuantAI</b> is a free research and statistics tool on this site. It helps plan a study (design, sample size, which test), then analyses a CSV or Excel file: it checks the assumptions, picks the right test, fits regression models and forecasts, and exports the same analysis as Stata, Python, R and SPSS code. Your file stays on your device. <a href="/ai">Open QuantAI</a>.' },
     { id: 'privacy', words: 'privacy private safe secure data upload stored store server confidential',
       a: 'QuantAI does all its calculations inside your browser, so your file is never uploaded or saved. If you use its optional AI assistant, only your question and a statistical summary are sent, never the file.' },
     { id: 'skills', words: 'skills tools stack languages technologies python r javascript react sql arcgis numpy tech',
@@ -32,7 +32,7 @@
     { id: 'location', words: 'where location based country ghana africa city remote',
       a: 'Amadu is based in Ghana and works with clients remotely too.' },
     { id: 'education', words: 'education school university degree study studied learn learned self taught training',
-      a: 'Amadu built his skills over five years through courses, mentors and a long run of real projects. <a href="founder.html">Read his background</a>.' },
+      a: 'Amadu holds a Bachelor of Public Health (Health Information) from the University of Health and Allied Sciences in Ho. His statistics, programming and mapping grew alongside that through courses, mentors and a long run of real projects. <a href="/founder">Read his background</a>.' },
     { id: 'hello', words: 'hi hello hey good morning afternoon evening greetings',
       a: 'Hello! Ask me about Amadu, his projects, the QuantAI data tool, or how to get in touch.' },
     { id: 'thanks', words: 'thanks thank you great cool nice ok okay',
@@ -98,7 +98,7 @@
   var sendIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>';
   var wrap = document.createElement('div');
   wrap.innerHTML =
-    '<button class="asst-btn" type="button" aria-expanded="false" aria-controls="asst">' + chatIcon + '<span>' + (/ai\.html$/.test(location.pathname) ? 'Ask about Amadu' : 'Ask a question') + '</span></button>' +
+    '<button class="asst-btn" type="button" aria-expanded="false" aria-controls="asst">' + chatIcon + '<span>' + (/\/ai(\.html)?$/.test(location.pathname) ? 'Ask about Amadu' : 'Ask a question') + '</span></button>' +
     '<section class="asst" id="asst" role="dialog" aria-label="Questions about Amadu Kamal" hidden>' +
       '<div class="asst-h"><div style="display:flex;gap:.65rem;align-items:center"><img src="assets/img/amadu-kamal-480.webp" alt=""><div><b>Ask about Amadu</b><small>AI assistant · answers about his work</small></div></div><button class="asst-x" type="button" aria-label="Close">&times;</button></div>' +
       '<div class="asst-log" aria-live="polite"></div>' +
@@ -122,9 +122,9 @@
   /* Turn the AI's plain text into safe HTML: escape everything, then allow **bold** and links to known places only */
   function esc(t) { return t.replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function safeHref(u) {
-    if (/^(index|founder|projects|ai)\.html(#[\w-]+)?$/.test(u)) return u;
+    if (/^\/?((index|founder|projects|ai|opportunities)(\.html)?)?(#[\w-]+)?$/.test(u) && u) return u;
     if (/^mailto:[\w.+-]+@[\w.-]+$/.test(u)) return u;
-    if (/^https:\/\/(wa\.me|www\.linkedin\.com|github\.com|sunshine-project-website\.vercel\.app|modelanalysishub\.com)(\/[^\s]*)?$/.test(u)) return u;
+    if (/^https:\/\/(wa\.me|www\.linkedin\.com|github\.com|sunshine-project-website\.vercel\.app|www\.thesunshineproject\.foundation|modelanalysishub\.com)(\/[^\s]*)?$/.test(u)) return u;
     return null;
   }
   function linkTag(href, text) {

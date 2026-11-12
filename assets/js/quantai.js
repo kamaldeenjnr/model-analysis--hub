@@ -4391,7 +4391,7 @@ const toolLabel = () => { const list = S.section === "method" ? METHOD_TOOLS : D
 function sideHTML() {
   const toolBtn = (sec, t) => `<button class="side-item ${S.section === sec && S.tool[sec] === t.id ? "on" : ""}" data-act="tool-open" data-sec="${sec}" data-tool="${t.id}">${esc(t.label)}</button>`;
   return `<div class="side-head">
-      <a class="side-brand" href="index.html" title="Model Analysis Hub home"><img src="assets/img/logo-mark.webp" alt="" width="28" height="28"><span>QuantAI</span></a>
+      <a class="side-brand" href="/" title="Model Analysis Hub home"><img src="assets/img/logo-mark.webp" alt="" width="28" height="28"><span>QuantAI</span></a>
       <button class="icon-btn side-x" data-act="side-close" aria-label="Close sidebar">${ICON.x}</button></div>
     <button class="side-new" data-act="chat-new">${ICON.plus}<span>New chat</span></button>
     <div class="side-scroll">
@@ -4405,7 +4405,7 @@ function sideHTML() {
     <div class="side-foot">
       <div class="side-data"><span class="side-h" style="padding:0">Data in use</span><b title="${esc(S.dsSource)}">${esc(S.dsSource)}</b><small>${S.ds ? `${S.ds.nRows.toLocaleString()} rows · ${S.ds.vars.length} variables` : ""}</small>
         <div class="side-data-btns"><label class="side-link-btn">Upload data<input type="file" id="qa-side-file" accept=".csv,.txt,.tsv,.xlsx,.xls" hidden></label><button class="side-link-btn" data-act="tool-open" data-sec="data" data-tool="data">Variables</button></div></div>
-      <div class="side-links"><a href="index.html">${ICON.home}Model Analysis Hub</a><a href="https://wa.me/233595586430" target="_blank" rel="noopener">Talk to Amadu</a></div>
+      <div class="side-links"><a href="/">${ICON.home}Model Analysis Hub</a><a href="https://wa.me/233595586430" target="_blank" rel="noopener">Talk to Amadu</a></div>
     </div>`;
 }
 function composerHTML(big) {
