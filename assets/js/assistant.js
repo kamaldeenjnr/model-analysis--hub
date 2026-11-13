@@ -1,4 +1,4 @@
-/* Site assistant — answers questions about Kamal Amadu and Model Analysis Hub.
+/* Site assistant — answers questions about Amadu Kamal and Model Analysis Hub.
    If AI_URL is set, questions go to the AI assistant (a Cloudflare Worker that calls Groq; the key stays there).
    If it is empty, slow or unavailable, the built-in knowledge base below answers instead. */
 (function () {
@@ -8,11 +8,11 @@
 
   var KB = [
     { id: 'about', words: 'who amadu kamal founder about you yourself person owner behind background story bio',
-      a: 'Kamal Amadu is a data analyst and software engineer from Ghana, and the founder of Model Analysis Hub. He builds statistical models, risk maps, dashboards and websites, and created the free QuantAI data tool. <a href="/founder">More about Kamal</a>.' },
+      a: 'Amadu Kamal is a data analyst and software engineer from Ghana, and the founder of Model Analysis Hub. He builds statistical models, risk maps, dashboards and websites, and created the free QuantAI data tool. <a href="/founder">More about Amadu</a>.' },
     { id: 'contact', words: 'contact reach email mail phone number call whatsapp talk message hire book meeting',
       a: 'The quickest way is WhatsApp: <a href="' + WA + '" target="_blank" rel="noopener">+233 59 558 6430</a>. You can also email <a href="mailto:' + MAIL + '">' + MAIL + '</a> or use the <a href="/#contact">contact form</a>.' },
     { id: 'services', words: 'service services offer do help build work with can you make need project job freelance consult consulting',
-      a: 'Kamal takes on three kinds of work: <b>statistical and predictive models</b> (forecasts, risk models, validation), <b>geospatial analysis</b> (maps of where a problem is concentrated) and <b>websites, dashboards and web platforms</b> (like <a href="/projects#sunshine-project">The Sunshine Project website</a>). Tell him what you need: <a href="/#contact">get in touch</a>.' },
+      a: 'Amadu takes on three kinds of work: <b>statistical and predictive models</b> (forecasts, risk models, validation), <b>geospatial analysis</b> (maps of where a problem is concentrated) and <b>websites, dashboards and web platforms</b> (like <a href="/projects#sunshine-project">The Sunshine Project website</a>). Tell him what you need: <a href="/#contact">get in touch</a>.' },
     { id: 'price', words: 'price cost charge rate fee budget how much pay quote',
       a: 'Pricing depends on the size of the job and how clean the data is. Send a short description and a sample of the data on <a href="' + WA + '" target="_blank" rel="noopener">WhatsApp</a> or <a href="mailto:' + MAIL + '">email</a> and you will get a quote.' },
     { id: 'projects', words: 'projects portfolio work examples case studies done previous past built',
@@ -20,7 +20,7 @@
     { id: 'malaria', words: 'malaria ghana map maps risk disease health epidemiology geospatial spatial region exceedance prevalence',
       a: 'The malaria project estimates relative malaria risk for each region of Ghana, the probability that prevalence goes above 30%, and checks the predictions against observed prevalence. <a href="/projects#malaria-risk">See the maps</a>.' },
     { id: 'sunshine', words: 'sunshine project ngo charity website websites site web design client clients built make build wordpress landing page',
-      a: 'Yes, Kamal builds websites. His latest is for <a href="/projects#sunshine-project">The Sunshine Project</a>, a Ghanaian NGO: a full multi-page site with an admin login so their team updates programmes, schedules and photos themselves. It is live at <a href="https://www.thesunshineproject.foundation" target="_blank" rel="noopener">sunshine-project-website.vercel.app</a>. Want one? <a href="https://wa.me/233595586430" target="_blank" rel="noopener">Message him on WhatsApp</a>.' },
+      a: 'Yes, Amadu builds websites. His latest is for <a href="/projects#sunshine-project">The Sunshine Project</a>, a Ghanaian NGO: a full multi-page site with an admin login so their team updates programmes, schedules and photos themselves. It is live at <a href="https://www.thesunshineproject.foundation" target="_blank" rel="noopener">sunshine-project-website.vercel.app</a>. Want one? <a href="https://wa.me/233595586430" target="_blank" rel="noopener">Message him on WhatsApp</a>.' },
     { id: 'projectflow', words: 'projectflow project flow university student thesis research management platform phd masters undergraduate',
       a: 'ProjectFlow is a full-stack platform for managing university research projects at Undergraduate, Master\'s and PhD level, from first draft to final publication. It was completed in 2025. <a href="/projects#projectflow">Details</a>.' },
     { id: 'quantai', words: 'quantai quant ai tool analyse analyze upload spreadsheet csv excel data statistics forecast regression correlation',
@@ -30,13 +30,13 @@
     { id: 'skills', words: 'skills tools stack languages technologies python r javascript react sql arcgis numpy tech',
       a: 'Main tools: <b>Python</b> and <b>R</b> for statistics and modelling (NumPy, SciPy), <b>ArcGIS</b> for maps, and <b>JavaScript</b>, <b>React</b> and <b>SQL</b> for web platforms and dashboards.' },
     { id: 'location', words: 'where location based country ghana africa city remote',
-      a: 'Kamal is based in Ghana and works with clients remotely too.' },
+      a: 'Amadu is based in Ghana and works with clients remotely too.' },
     { id: 'education', words: 'education school university degree study studied learn learned self taught training',
-      a: 'Kamal holds a Bachelor of Public Health (Health Information) from the University of Health and Allied Sciences in Ho. His statistics, programming and mapping grew alongside that through courses, mentors and a long run of real projects. <a href="/founder">Read his background</a>.' },
+      a: 'Amadu holds a Bachelor of Public Health (Health Information) from the University of Health and Allied Sciences in Ho. His statistics, programming and mapping grew alongside that through courses, mentors and a long run of real projects. <a href="/founder">Read his background</a>.' },
     { id: 'hello', words: 'hi hello hey good morning afternoon evening greetings',
-      a: 'Hello! Ask me about Kamal, his projects, the QuantAI data tool, or how to get in touch.' },
+      a: 'Hello! Ask me about Amadu, his projects, the QuantAI data tool, or how to get in touch.' },
     { id: 'thanks', words: 'thanks thank you great cool nice ok okay',
-      a: 'You\'re welcome. If you want to talk about a project, WhatsApp is the fastest: <a href="' + WA + '" target="_blank" rel="noopener">message Kamal</a>.' }
+      a: 'You\'re welcome. If you want to talk about a project, WhatsApp is the fastest: <a href="' + WA + '" target="_blank" rel="noopener">message Amadu</a>.' }
   ];
 
   var STOP = ' a an the i me my you your he his is are was do does did can could will would how what who where when why which to of in on for and or it this that with about please tell show '
@@ -65,7 +65,7 @@
       if (score > bestScore) { bestScore = score; best = k; }
     });
     if (best && bestScore >= 2) return best.a;
-    return 'I\'m not sure about that one. I can tell you about <b>Kamal</b>, his <b>projects</b>, <b>services</b>, the <b>QuantAI</b> tool, or how to <b>contact</b> him. For anything else, <a href="' + WA + '" target="_blank" rel="noopener">ask Kamal directly on WhatsApp</a>.';
+    return 'I\'m not sure about that one. I can tell you about <b>Amadu</b>, his <b>projects</b>, <b>services</b>, the <b>QuantAI</b> tool, or how to <b>contact</b> him. For anything else, <a href="' + WA + '" target="_blank" rel="noopener">ask Amadu directly on WhatsApp</a>.';
   }
 
   var css = '' +
@@ -98,9 +98,9 @@
   var sendIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>';
   var wrap = document.createElement('div');
   wrap.innerHTML =
-    '<button class="asst-btn" type="button" aria-expanded="false" aria-controls="asst">' + chatIcon + '<span>' + (/\/ai(\.html)?$/.test(location.pathname) ? 'Ask about Kamal' : 'Ask a question') + '</span></button>' +
-    '<section class="asst" id="asst" role="dialog" aria-label="Questions about Kamal Amadu" hidden>' +
-      '<div class="asst-h"><div style="display:flex;gap:.65rem;align-items:center"><img src="assets/img/amadu-kamal-480.webp" alt=""><div><b>Ask about Kamal</b><small>AI assistant · answers about his work</small></div></div><button class="asst-x" type="button" aria-label="Close">&times;</button></div>' +
+    '<button class="asst-btn" type="button" aria-expanded="false" aria-controls="asst">' + chatIcon + '<span>' + (/\/ai(\.html)?$/.test(location.pathname) ? 'Ask about Amadu' : 'Ask a question') + '</span></button>' +
+    '<section class="asst" id="asst" role="dialog" aria-label="Questions about Amadu Kamal" hidden>' +
+      '<div class="asst-h"><div style="display:flex;gap:.65rem;align-items:center"><img src="assets/img/amadu-kamal-480.webp" alt=""><div><b>Ask about Amadu</b><small>AI assistant · answers about his work</small></div></div><button class="asst-x" type="button" aria-label="Close">&times;</button></div>' +
       '<div class="asst-log" aria-live="polite"></div>' +
       '<div class="asst-chips"><button type="button">What services do you offer?</button><button type="button">Show me projects</button><button type="button">What is QuantAI?</button><button type="button">How do I contact you?</button></div>' +
       '<form class="asst-f"><label class="sr" for="asst-q">Your question</label><input id="asst-q" type="text" autocomplete="off" placeholder="Type a question…" maxlength="300"><button type="submit" aria-label="Send">' + sendIcon + '</button></form>' +
@@ -116,7 +116,7 @@
   }
   function open(v) {
     box.hidden = !v; btn.setAttribute('aria-expanded', String(v));
-    if (v) { if (!log.children.length) add('Hi, I can answer quick questions about Kamal Amadu and Model Analysis Hub. What would you like to know?'); input.focus(); }
+    if (v) { if (!log.children.length) add('Hi, I can answer quick questions about Amadu Kamal and Model Analysis Hub. What would you like to know?'); input.focus(); }
     else btn.focus();
   }
   /* Turn the AI's plain text into safe HTML: escape everything, then allow **bold** and links to known places only */

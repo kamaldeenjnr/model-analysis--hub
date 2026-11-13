@@ -1,5 +1,5 @@
 /*
- * QuantAI engine — Model Analysis Hub (Kamal Amadu)
+ * QuantAI engine — Model Analysis Hub (Amadu Kamal)
  * Pure statistics, no network. Everything here runs in the visitor's browser.
  *   - column type detection (number, date, category, text)
  *   - descriptive statistics, histograms, frequency tables

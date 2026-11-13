@@ -1,8 +1,8 @@
-# Kamal Amadu · Model Analysis Hub
+# Amadu Kamal · Model Analysis Hub
 
-> Kamal Amadu (also written Amadu Kamal, and kamaldeenjnr on GitHub) is a Ghanaian data analyst and software engineer, and the founder of Model Analysis Hub. He builds websites, statistical and geospatial models, and dashboards, and created QuantAI, a free in-browser data analysis tool.
+> Amadu Kamal (also known as Amadu Kamal Jnr, Kamal Amadu, and kamaldeenjnr on GitHub) is a Ghanaian data analyst and software engineer, and the founder of Model Analysis Hub. He builds websites, statistical and geospatial models, and dashboards, and created QuantAI, a free in-browser data analysis tool.
 
-Kamal Amadu holds a Bachelor of Public Health (Health Information) from the University of Health and Allied Sciences, Ghana, and built his statistics and engineering through courses, mentors and real projects. He combines the statistics needed to build a model you can trust with the engineering needed to turn it into something people use. He is based in Ghana and works with clients remotely.
+Amadu Kamal holds a Bachelor of Public Health (Health Information) from the University of Health and Allied Sciences, Ghana, and built his statistics and engineering through courses, mentors and real projects. He combines the statistics needed to build a model you can trust with the engineering needed to turn it into something people use. He is based in Ghana and works with clients remotely.
 
 - Occupation: Data Analyst, Software Engineer, Founder of Model Analysis Hub
 - Location: Ghana, West Africa
@@ -13,8 +13,8 @@ Kamal Amadu holds a Bachelor of Public Health (Health Information) from the Univ
 
 ## Pages
 
-- [Home](https://modelanalysishub.com/): Who Kamal Amadu is, what he does, selected work and contact details.
-- [About Kamal Amadu](https://modelanalysishub.com/founder): Full biography, toolkit and milestones.
+- [Home](https://modelanalysishub.com/): Who Amadu Kamal is, what he does, selected work and contact details.
+- [About Amadu Kamal](https://modelanalysishub.com/founder): Full biography, toolkit and milestones.
 - [Projects](https://modelanalysishub.com/projects): Case studies of his models, dashboards and web platforms, including SafeWatch, his water emergency alert system for the Volta Lake, and Soma, his food delivery platform for the Volta Region.
 - [Opportunities](https://modelanalysishub.com/opportunities): Fully funded scholarships, fellowships, internships, data jobs and competitions open to Ghanaians and Africans, with criteria and deadlines, updated weekly.
 - [QuantAI](https://modelanalysishub.com/ai): Free research methods and statistics tool. Plan a study, upload a spreadsheet, and get assumption-checked tests, regression, forecasts and matching Stata, Python, R and SPSS code.
@@ -29,9 +29,9 @@ Kamal Amadu holds a Bachelor of Public Health (Health Information) from the Univ
 
 ## Projects
 
-- [SafeWatch](https://modelanalysishub.com/projects#safewatch) (2026, grant project): Water emergency alerts for the Volta Lake in Ghana, designed and built by Kamal Amadu. An SOS with location reaches the person on duty from an Android app, a browser app, SMS or a USSD dial code; unanswered alerts go to the backup, the coordinator and the closest responder; a missed trip check-in raises an alert by itself; storm warnings in Ewe, Twi and English. Live at https://safewatch-xyqr.onrender.com. Tools: Python, FastAPI, PostgreSQL, React, TypeScript, React Native, Africa's Talking, Render.
-- [Soma](https://modelanalysishub.com/projects#soma) (2026, own product): A local food delivery platform for Ho, Hohoe and the Volta Region in Ghana, designed and built by Kamal Amadu. Customer, vendor, rider and admin apps; Mobile Money and card payments through Paystack with automatic payouts; phone notifications; installable web app. Live at https://soma-wmql.onrender.com, source at https://github.com/kamaldeenjnr/soma. Tools: Node.js, Express, SQLite, JavaScript, Paystack, Render.
-- [The Sunshine Project website](https://modelanalysishub.com/projects#sunshine-project) (2026, client project): A multi-page website for The Sunshine Project, a Ghanaian NGO, designed and built by Kamal Amadu. Includes an admin login so the NGO's team updates programmes, schedules and photos themselves. Live at https://www.thesunshineproject.foundation. Tools: HTML, CSS, JavaScript, Python, Decap CMS, Vercel.
+- [SafeWatch](https://modelanalysishub.com/projects#safewatch) (2026, grant project): Water emergency alerts for the Volta Lake in Ghana, designed and built by Amadu Kamal. An SOS with location reaches the person on duty from an Android app, a browser app, SMS or a USSD dial code; unanswered alerts go to the backup, the coordinator and the closest responder; a missed trip check-in raises an alert by itself; storm warnings in Ewe, Twi and English. Live at https://safewatch-xyqr.onrender.com. Tools: Python, FastAPI, PostgreSQL, React, TypeScript, React Native, Africa's Talking, Render.
+- [Soma](https://modelanalysishub.com/projects#soma) (2026, own product): A local food delivery platform for Ho, Hohoe and the Volta Region in Ghana, designed and built by Amadu Kamal. Customer, vendor, rider and admin apps; Mobile Money and card payments through Paystack with automatic payouts; phone notifications; installable web app. Live at https://soma-wmql.onrender.com, source at https://github.com/kamaldeenjnr/soma. Tools: Node.js, Express, SQLite, JavaScript, Paystack, Render.
+- [The Sunshine Project website](https://modelanalysishub.com/projects#sunshine-project) (2026, client project): A multi-page website for The Sunshine Project, a Ghanaian NGO, designed and built by Amadu Kamal. Includes an admin login so the NGO's team updates programmes, schedules and photos themselves. Live at https://www.thesunshineproject.foundation. Tools: HTML, CSS, JavaScript, Python, Decap CMS, Vercel.
 - [Malaria risk prediction model, Ghana](https://modelanalysishub.com/projects#malaria-risk) (2025): A spatial model combining climate and population data to rank Ghana's regions by predicted malaria risk. Tools: Python, R, ArcGIS.
 - [Risk modelling: probability of high malaria burden](https://modelanalysishub.com/projects#risk-modeling): Estimates the chance that each region's prevalence exceeds 30%, for planning and preparedness.
 - [Model validation](https://modelanalysishub.com/projects#model-validation): Observed versus predicted prevalence, checking how far the model can be trusted.
