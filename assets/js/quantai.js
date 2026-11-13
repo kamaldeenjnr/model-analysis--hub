@@ -4405,7 +4405,7 @@ function sideHTML() {
     <div class="side-foot">
       <div class="side-data"><span class="side-h" style="padding:0">Data in use</span><b title="${esc(S.dsSource)}">${esc(S.dsSource)}</b><small>${S.ds ? `${S.ds.nRows.toLocaleString()} rows · ${S.ds.vars.length} variables` : ""}</small>
         <div class="side-data-btns"><label class="side-link-btn">Upload data<input type="file" id="qa-side-file" accept=".csv,.txt,.tsv,.xlsx,.xls" hidden></label><button class="side-link-btn" data-act="tool-open" data-sec="data" data-tool="data">Variables</button></div></div>
-      <div class="side-links"><a href="/">${ICON.home}Model Analysis Hub</a><a href="https://wa.me/233595586430" target="_blank" rel="noopener">Talk to Amadu</a></div>
+      <div class="side-links"><a href="/">${ICON.home}Model Analysis Hub</a><a href="https://wa.me/233595586430" target="_blank" rel="noopener">Talk to Kamal</a></div>
     </div>`;
 }
 function composerHTML(big) {

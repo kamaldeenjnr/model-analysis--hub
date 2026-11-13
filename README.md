@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Hosting-GitHub_Pages-0C203B?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Pages">
 </p>
 
-The source of **[modelanalysishub.com](https://modelanalysishub.com)**, the studio site of [Amadu Kamal](https://modelanalysishub.com/founder.html). Model Analysis Hub builds statistical and geospatial models, dashboards and web platforms, and makes **QuantAI**, a free research and statistics assistant.
+The source of **[modelanalysishub.com](https://modelanalysishub.com)**, the studio site of [Kamal Amadu](https://modelanalysishub.com/founder.html). Model Analysis Hub builds statistical and geospatial models, dashboards and web platforms, and makes **QuantAI**, a free research and statistics assistant.
 
 <br>
 
@@ -59,4 +59,4 @@ SafeWatch (water emergency alerts for the Volta Lake), malaria risk mapping for 
 <a href="mailto:amadukamal8@gmail.com"><img src="https://img.shields.io/badge/Email-amadukamal8@gmail.com-0C203B?style=for-the-badge&logo=gmail&logoColor=white" alt="Email"></a>
 <a href="https://www.linkedin.com/in/amadu-kamal-65ab5326a"><img src="https://img.shields.io/badge/LinkedIn-Amadu_Kamal-0C203B?style=for-the-badge&logo=linkedin&logoColor=white" alt="LinkedIn"></a>
 
-<sub>© 2026 Model Analysis Hub · Amadu Kamal · Made in Ghana</sub>
+<sub>© 2026 Model Analysis Hub · Kamal Amadu · Made in Ghana</sub>
