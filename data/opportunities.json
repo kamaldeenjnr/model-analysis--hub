@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-09",
+ "updated": "2026-11-16",
  "items": [
   {
    "title": "Commonwealth Shared Scholarships",
@@ -114,25 +114,6 @@
    "deadline_note": "Up to three awards.",
    "url": "https://www.sbs.ox.ac.uk/oxford-experience/scholarships-and-funding/afox-graduate-scholarships",
    "fit": "Only if moving towards health-tech or social enterprise leadership.",
-   "verified": true
-  },
-  {
-   "title": "DAAD EPOS – MSc Development Economics (Göttingen)",
-   "type": "scholarship",
-   "provider": "DAAD / University of Göttingen",
-   "where": "Germany",
-   "level": "Master's",
-   "fields": "Development economics, quantitative methods",
-   "funding": "Monthly stipend, insurance, travel, German course",
-   "eligibility": [
-    "From a developing country",
-    "2 years' relevant work experience",
-    "Degree in the upper third, less than 6 years old"
-   ],
-   "deadline": "2026-11-15",
-   "deadline_note": "Window 1 October – 15 November 2026 for October 2027 entry.",
-   "url": "https://uni-goettingen.de/en/572166.html",
-   "fit": "Econometrics-heavy degree for analysts moving towards health economics.",
    "verified": true
   },
   {
@@ -538,11 +519,11 @@
     "New organisation",
     "Two-page concept note plus CV"
    ],
-   "deadline": "2026-11-15",
-   "deadline_note": "Regular round 15 Nov 2026; extension round reported to 6 Dec 2026",
+   "deadline": "2026-12-06",
+   "deadline_note": "Regular round closed 15 Nov 2026; extension round listed to 6 Dec 2026 (midnight PT) — confirm on d-prize.org.",
    "url": "https://d-prize.org/",
    "fit": "A venture delivering malaria prevention in the Volta Region.",
-   "verified": true
+   "verified": false
   },
   {
    "title": "TEF Entrepreneurship Programme",
@@ -730,26 +711,6 @@
    "url": "https://www.africa.engineering.cmu.edu/admissions/how-to-apply/index.html",
    "fit": "US-accredited CS/AI master's in Africa that builds on his Soma and QuantAI work.",
    "verified": true
-  },
-  {
-   "title": "CMU-Africa Certificate in AI for Africa",
-   "type": "training",
-   "provider": "Carnegie Mellon University Africa",
-   "where": "Online",
-   "level": "Graduates & professionals",
-   "fields": "Python for AI, ML maths, machine learning, generative AI",
-   "funding": "Free for selected applicants",
-   "eligibility": [
-    "Basic linear algebra, probability and statistics",
-    "Programming experience",
-    "Laptop and reliable internet",
-    "About 5–6 hours a week"
-   ],
-   "deadline": "2026-11-15",
-   "deadline_note": "Cohort starts 17 January 2027. Date from listings — confirm on the CMU-Africa page.",
-   "url": "https://www.africa.engineering.cmu.edu/academics/ai-certificate/",
-   "fit": "Free CMU credential that strengthens ML skills for QuantAI and grad applications.",
-   "verified": false
   },
   {
    "title": "Hong Kong PhD Fellowship Scheme 2027/28",
@@ -1151,6 +1112,25 @@
    "deadline_note": "15:00 CET; references due 12 Jan 2027",
    "url": "https://phd.ista.ac.at/phd-application-admission/",
    "fit": "Salaried data science PhD that admits Bachelor's holders",
+   "verified": true
+  },
+  {
+   "title": "CEGA Fellowship Program 2027–28 (UC Berkeley)",
+   "type": "fellowship",
+   "provider": "Center for Effective Global Action, UC Berkeley",
+   "where": "Berkeley, USA (16 weeks)",
+   "level": "Master's holders, PhD students & early-career PhDs",
+   "fields": "Economics, statistics, epidemiology/public health, social sciences",
+   "funding": "Stipend; resident fellows also get flights, housing, meals, visa fees and insurance",
+   "eligibility": [
+    "Citizen of an East or West African country, secondary school in Africa",
+    "At least a master's (or finishing one before the start), PhD student, or PhD within 8 years",
+    "Fluent English; plans to return to an African institution"
+   ],
+   "deadline": "2027-01-17",
+   "deadline_note": "17 January 2027, 5 pm GMT. Info webinar 2 December 2026. Fall 2027 or Spring 2028 cohort.",
+   "url": "https://cega.berkeley.edu/article/cega-fellowship-program-2027-2028-request-for-applications/",
+   "fit": "Practitioner track suits an applied health data analyst — needs a master's first.",
    "verified": true
   }
  ]
